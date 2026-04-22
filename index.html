@@ -1,0 +1,2326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#0f0f0f" />
+  <title>Workout Tracker</title>
+  <link rel="manifest" href="/manifest.json" />
+  <script src="/config.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface2: #242424;
+      --border: #2e2e2e;
+      --accent: #e8ff47;
+      --accent-dim: #b8cc30;
+      --text: #f0f0f0;
+      --text-muted: #888;
+      --danger: #ff4d4d;
+      --radius: 12px;
+      --tab-h: 64px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── App shell ── */
+    #app {
+      max-width: 480px;
+      margin: 0 auto;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ── Login ── */
+    .login-screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 32px 24px;
+      gap: 24px;
+    }
+
+    .login-logo {
+      text-align: center;
+    }
+
+    .login-logo h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .login-logo h1 span {
+      color: var(--accent);
+    }
+
+    .login-logo p {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 6px;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .field input:focus {
+      border-color: var(--accent);
+    }
+
+    .field input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 15px;
+      background: var(--accent);
+      color: #0f0f0f;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: opacity 0.15s;
+      letter-spacing: 0.2px;
+    }
+
+    .btn-primary:active { opacity: 0.8; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .error-msg {
+      background: rgba(255,77,77,0.12);
+      border: 1px solid rgba(255,77,77,0.3);
+      color: var(--danger);
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    /* ── Main app ── */
+    .main-app {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Tab content ── */
+    .tab-content {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 16px;
+      padding-bottom: calc(var(--tab-h) + 16px);
+    }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Bottom nav ── */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 480px;
+      height: var(--tab-h);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: stretch;
+      z-index: 100;
+    }
+
+    .nav-tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      transition: color 0.15s;
+      text-transform: uppercase;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .nav-tab.active {
+      color: var(--accent);
+    }
+
+    .nav-tab svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* ── Tab placeholders ── */
+    .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 12px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .placeholder svg {
+      width: 48px;
+      height: 48px;
+      stroke: var(--border);
+      fill: none;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .placeholder h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .placeholder p {
+      font-size: 14px;
+      max-width: 240px;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .page-header h2 {
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    .btn-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text);
+    }
+
+    .btn-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* ── Log tab: new session card ── */
+    .session-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .session-card .row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .session-card .row:last-child { margin-bottom: 0; }
+
+    .session-card select,
+    .session-card input[type="date"] {
+      flex: 1;
+      padding: 11px 12px;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      appearance: none;
+      text-align: center;
+      text-align-last: center;
+    }
+
+    .session-card select:focus,
+    .session-card input[type="date"]:focus {
+      border-color: var(--accent);
+    }
+
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid rgba(0,0,0,0.2);
+      border-top-color: #0f0f0f;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .spinner-lg {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 48px auto;
+      display: block;
+    }
+
+    /* ── Search bar ── */
+    .search-bar {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .search-bar input {
+      width: 100%;
+      padding: 12px 16px 12px 40px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+    }
+
+    .search-bar input:focus { border-color: var(--accent); }
+    .search-bar input::placeholder { color: var(--text-muted); }
+
+    .search-bar .icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      stroke: var(--text-muted);
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      pointer-events: none;
+    }
+
+    /* ── Exercise group section ── */
+    .group-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      padding: 8px 0 6px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+      margin-top: 20px;
+    }
+
+    /* ── Accordion exercise header ── */
+    .ex-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    .ex-header:last-child { border-bottom: none; }
+
+    .ex-name {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ex-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: var(--surface2);
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .ex-chevron {
+      width: 16px;
+      height: 16px;
+      stroke: var(--text-muted);
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      flex-shrink: 0;
+      transition: transform 0.2s;
+    }
+
+    .ex-chevron.open { transform: rotate(180deg); }
+
+    /* ── Variation rows (inside accordion) ── */
+    .variation-list {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .variation-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 0 11px 16px;
+      border-top: 1px solid var(--border);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .variation-row:active { background: var(--surface2); }
+
+    .var-name {
+      flex: 1;
+      font-size: 14px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .var-arrow {
+      width: 14px;
+      height: 14px;
+      stroke: var(--border);
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      flex-shrink: 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 0;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* ── Exercise detail modal ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+    }
+
+    .modal-sheet {
+      width: 100%;
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 20px;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      gap: 12px;
+    }
+
+    .modal-close {
+      width: 32px;
+      height: 32px;
+      background: var(--surface2);
+      border: none;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      color: var(--text-muted);
+    }
+
+    .modal-close svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .modal-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .modal-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .modal-notes {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 14px;
+    }
+
+    .modal-no-notes {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    /* ── Add exercise form ── */
+    .form-field {
+      margin-bottom: 14px;
+    }
+
+    .form-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .form-field input,
+    .form-field select,
+    .form-field textarea {
+      width: 100%;
+      padding: 12px 14px;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .form-field input:focus,
+    .form-field select:focus,
+    .form-field textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .form-field input::placeholder,
+    .form-field textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .form-field textarea {
+      resize: none;
+      height: 80px;
+      line-height: 1.5;
+    }
+
+    .form-field select option { background: var(--surface2); }
+
+    .form-error {
+      background: rgba(255,77,77,0.12);
+      border: 1px solid rgba(255,77,77,0.3);
+      color: var(--danger);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+
+    .btn-delete {
+      width: 100%;
+      padding: 14px;
+      background: transparent;
+      color: var(--danger);
+      font-size: 15px;
+      font-weight: 600;
+      border: 1.5px solid rgba(255,77,77,0.3);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+
+    .btn-delete:active { opacity: 0.7; }
+    .btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(0,0,0,0.2);
+      border-top-color: #0f0f0f;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    /* ── Session history ── */
+    .history-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin: 20px 0 8px;
+    }
+
+    .history-month-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .history-month-header span {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .history-month-header svg {
+      width: 14px; height: 14px;
+      stroke: var(--text-muted);
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      transition: transform 0.2s;
+    }
+
+    .history-month-header.open svg { transform: rotate(180deg); }
+
+    .session-history-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .session-history-card:last-child { border-bottom: none; }
+
+    .session-date-block {
+      width: 44px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .session-date-block .day {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--accent);
+    }
+
+    .session-date-block .dow {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .session-info { flex: 1; min-width: 0; }
+
+    .session-location {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .session-exercise-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .session-arrow {
+      width: 14px; height: 14px;
+      stroke: var(--border);
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      flex-shrink: 0;
+    }
+
+    /* ── Active session view ── */
+    .session-header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+
+    .session-header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .session-header-top h3 {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .btn-finish {
+      padding: 8px 16px;
+      background: var(--accent);
+      color: #0f0f0f;
+      font-size: 13px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .btn-finish:active { opacity: 0.8; }
+
+    .session-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── Session exercise cards ── */
+    .session-ex-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .session-ex-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .session-ex-header h4 {
+      flex: 1;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .session-ex-header .variation-tag {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .btn-icon-sm {
+      width: 28px;
+      height: 28px;
+      background: var(--surface2);
+      border: none;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .btn-icon-sm svg {
+      width: 14px; height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    /* ── Sets table ── */
+    .sets-table { width: 100%; }
+
+    .sets-header, .set-row {
+      display: grid;
+      gap: 6px;
+      padding: 9px 14px;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .sets-header {
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .set-row { border-bottom: 1px solid var(--border); }
+    .set-row:last-child { border-bottom: none; }
+
+    /* grid columns set dynamically via style */
+    .set-num {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .set-input {
+      width: 100%;
+      padding: 8px 8px;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 600;
+      text-align: center;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .set-input:focus { border-color: var(--accent); }
+
+    .set-type-select {
+      width: 100%;
+      padding: 8px 4px;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      outline: none;
+      font-family: inherit;
+      appearance: none;
+      text-align: center;
+    }
+
+    .set-type-select:focus { border-color: var(--accent); }
+
+    .set-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .set-toggle input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .set-remove {
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      color: var(--border);
+    }
+
+    .set-remove:active { color: var(--danger); }
+
+    .set-remove svg {
+      width: 13px; height: 13px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    .btn-add-set {
+      width: 100%;
+      padding: 10px;
+      background: transparent;
+      border: none;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-add-set svg {
+      width: 14px; height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    .btn-add-exercise {
+      width: 100%;
+      padding: 14px;
+      background: var(--surface);
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .btn-add-exercise svg {
+      width: 16px; height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    /* ── Exercise picker (full overlay) ── */
+    .picker-overlay {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 480px;
+      background: var(--bg);
+      z-index: 150;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .picker-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .picker-header h3 {
+      flex: 1;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .picker-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      padding-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+<div id="app" x-data="app()" x-init="init()">
+
+  <!-- ── Login Screen ── -->
+  <div class="login-screen" x-show="!loggedIn" x-cloak>
+    <div class="login-logo">
+      <h1>LIFT<span>LOG</span></h1>
+      <p>Track every rep, every session.</p>
+    </div>
+
+    <form class="login-form" @submit.prevent="login()">
+      <div class="field">
+        <label>Email</label>
+        <input
+          type="email"
+          x-model="loginForm.email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          required
+        />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input
+          type="password"
+          x-model="loginForm.password"
+          placeholder="••••••••"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+
+      <div class="error-msg" x-show="loginError" x-text="loginError"></div>
+
+      <button type="submit" class="btn-primary" :disabled="loginLoading">
+        <span x-show="!loginLoading">Sign In</span>
+        <span x-show="loginLoading"><span class="spinner"></span></span>
+      </button>
+    </form>
+  </div>
+
+  <!-- ── Main App ── -->
+  <div class="main-app" x-show="loggedIn" x-cloak>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+
+      <!-- Log Tab -->
+      <div class="tab-pane" :class="{ active: activeTab === 'log' }">
+
+        <!-- ── Active session view ── -->
+        <div x-show="activeSession">
+          <div class="session-header">
+            <div class="session-header-top">
+              <h3 x-text="activeSession?.title || formatDateLong(activeSession?.date)"></h3>
+              <button class="btn-finish" @click="finishSession()">Finish</button>
+            </div>
+            <div class="session-meta" x-text="formatDateLong(activeSession?.date) + (activeSession?.location ? ' · ' + activeSession.location : '')"></div>
+          </div>
+
+          <!-- Exercise cards -->
+          <template x-for="se in activeSessionExercises" :key="se.id">
+            <div class="session-ex-card">
+              <div class="session-ex-header">
+                <div>
+                  <h4 x-text="se.expand?.exercise?.name"></h4>
+                  <div class="variation-tag" x-show="se.expand?.exercise?.variation" x-text="se.expand?.exercise?.variation"></div>
+                </div>
+                <button class="btn-icon-sm" @click="removeExerciseFromSession(se)" title="Remove">
+                  <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+
+              <!-- Last session summary -->
+              <template x-if="se._lastSummary && se._lastSummary.length">
+                <div style="padding:8px 14px 10px;display:flex;flex-direction:column;gap:3px">
+                  <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:var(--text-muted);opacity:0.6;margin-bottom:2px">Last session</div>
+                  <template x-for="line in se._lastSummary" :key="line">
+                    <div style="font-size:15px;color:var(--text-muted)" x-text="line"></div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- Sets -->
+              <div class="sets-table">
+                <!-- Header -->
+                <div class="sets-header" :style="setGridStyle(se)">
+                  <span class="set-num">#</span>
+                  <span>Type</span>
+                  <template x-if="setHasReps(se)"><span style="text-align:center">Reps</span></template>
+                  <template x-if="setHasWeight(se)"><span style="text-align:center">lbs</span></template>
+                  <template x-if="setHasDuration(se)"><span style="text-align:center">Sec</span></template>
+                  <span style="text-align:center">Top</span>
+                  <span style="text-align:center">Fail</span>
+                  <span></span>
+                </div>
+
+                <template x-for="(set, i) in se.sets" :key="i">
+                  <div class="set-row" :style="setGridStyle(se)">
+                    <span class="set-num" x-text="i + 1"></span>
+                    <select class="set-type-select" x-model="set.set_type" @change="rebuildSetGrid(se)">
+                      <option value="Weighted">Wt</option>
+                      <option value="Body Weight">BW</option>
+                      <option value="Isometric">Iso</option>
+                    </select>
+                    <template x-if="setHasReps(se)">
+                      <input class="set-input" type="number" inputmode="numeric" placeholder="0" x-model="set.reps" @change="saveSet(se, set, i)" />
+                    </template>
+                    <template x-if="setHasWeight(se)">
+                      <input class="set-input" type="number" inputmode="decimal" placeholder="0" x-model="set.weight" @change="saveSet(se, set, i)" />
+                    </template>
+                    <template x-if="setHasDuration(se)">
+                      <input class="set-input" type="number" inputmode="numeric" placeholder="0" x-model="set.duration" @change="saveSet(se, set, i)" />
+                    </template>
+                    <div class="set-toggle"><input type="checkbox" x-model="set.top_set" @change="saveSet(se, set, i)" /></div>
+                    <div class="set-toggle"><input type="checkbox" x-model="set.to_failure" @change="saveSet(se, set, i)" /></div>
+                    <button class="set-remove" @click="removeSet(se, set, i)" title="Remove set">
+                      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </template>
+              </div>
+
+              <button class="btn-add-set" @click="addSet(se)">
+                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Set
+              </button>
+            </div>
+          </template>
+
+          <button class="btn-add-exercise" @click="openExercisePicker()">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Exercise
+          </button>
+        </div>
+
+        <!-- ── Log home (no active session) ── -->
+        <div x-show="!activeSession">
+          <div class="page-header">
+            <h2>Log</h2>
+          </div>
+
+          <!-- Start new session -->
+          <div class="session-card">
+            <div class="row">
+              <input type="text" placeholder="Title (e.g. Push Day)" x-model="newSession.title" style="flex:1;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;text-align:center;" />
+            </div>
+            <div class="row">
+              <input type="datetime-local" x-model="newSession.datetime" style="flex:1;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;color-scheme:dark;text-align:center;" />
+            </div>
+            <div class="row">
+              <select x-model="newSession.location">
+                <option value="">Location…</option>
+                <option>Home</option>
+                <option>UFC</option>
+                <option>Workout Anytime</option>
+                <option>Travel</option>
+              </select>
+            </div>
+            <button class="btn-primary" @click="startSession()" :disabled="sessionStarting">
+              <span x-show="!sessionStarting">Start Session</span>
+              <span x-show="sessionStarting"><span class="spinner"></span></span>
+            </button>
+          </div>
+
+          <!-- Session history -->
+          <div x-show="historyLoading"><div class="spinner-lg"></div></div>
+
+          <div x-show="!historyLoading">
+            <!-- Recent (last 2 weeks) -->
+            <div x-show="recentSessions.length > 0">
+              <div class="history-section-label">Recent</div>
+              <template x-for="s in recentSessions" :key="s.id">
+                <div class="session-history-card" @click="resumeSession(s)">
+                  <div class="session-date-block">
+                    <div class="day" x-text="formatDay(s.date)"></div>
+                    <div class="dow" x-text="formatDow(s.date)"></div>
+                  </div>
+                  <div class="session-info">
+                    <div class="session-location" x-text="s.title || formatDateLong(s.date)"></div>
+                    <div class="session-exercise-count" x-text="s._exerciseCount + ' exercise' + (s._exerciseCount === 1 ? '' : 's') + (s.location ? ' · ' + s.location : '')"></div>
+                  </div>
+                  <svg class="session-arrow" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </template>
+            </div>
+
+            <!-- Older by year → month -->
+            <template x-for="year in olderYears" :key="year">
+              <div>
+                <div class="history-section-label" x-text="year"></div>
+                <template x-for="month in olderMonths[year]" :key="month">
+                  <div>
+                    <div class="history-month-header" :class="{ open: openHistoryMonths[year+'-'+month] }" @click="toggleHistoryMonth(year, month)">
+                      <span x-text="monthName(month)"></span>
+                      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                    <div x-show="openHistoryMonths[year+'-'+month]">
+                      <template x-for="s in olderSessions[year+'-'+month]" :key="s.id">
+                        <div class="session-history-card" @click="resumeSession(s)">
+                          <div class="session-date-block">
+                            <div class="day" x-text="formatDay(s.date)"></div>
+                            <div class="dow" x-text="formatDow(s.date)"></div>
+                          </div>
+                          <div class="session-info">
+                            <div class="session-location" x-text="s.location || 'No location'"></div>
+                            <div class="session-exercise-count" x-text="s._exerciseCount + ' exercise' + (s._exerciseCount === 1 ? '' : 's')"></div>
+                          </div>
+                          <svg class="session-arrow" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <div class="empty-state" x-show="recentSessions.length === 0 && olderYears.length === 0">
+              No sessions yet. Start your first workout above.
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Exercises Tab -->
+      <div class="tab-pane" :class="{ active: activeTab === 'exercises' }">
+        <div class="page-header">
+          <h2>Exercises</h2>
+          <button class="btn-icon" title="Add exercise" @click="openAddExercise()">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+
+        <!-- Search -->
+        <div class="search-bar">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            type="search"
+            placeholder="Search exercises…"
+            x-model="exerciseSearch"
+            @input="filterExercises()"
+          />
+        </div>
+
+        <!-- Loading -->
+        <div x-show="exercisesLoading">
+          <div class="spinner-lg"></div>
+        </div>
+
+        <!-- Error -->
+        <div class="error-msg" x-show="exercisesError" x-text="exercisesError"></div>
+
+        <!-- List grouped by muscle group → exercise name (accordion) → variations -->
+        <div x-show="!exercisesLoading && !exercisesError">
+          <template x-for="group in exerciseGroups" :key="group">
+            <div x-show="groupedExercises[group] && groupedExercises[group].length > 0">
+              <div class="group-label" x-text="group"></div>
+
+              <template x-for="exGroup in groupedExercises[group]" :key="exGroup.name">
+                <div>
+                  <!-- Accordion header -->
+                  <div class="ex-header" @click="toggleAccordion(exGroup.name)">
+                    <div class="ex-name" x-text="exGroup.name"></div>
+                    <div class="ex-badge" x-show="exGroup.muscle" x-text="exGroup.muscle"></div>
+                    <svg class="ex-chevron" :class="{ open: openAccordions[exGroup.name] }" viewBox="0 0 24 24">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                  </div>
+
+                  <!-- Variation rows -->
+                  <div class="variation-list" x-show="openAccordions[exGroup.name]">
+                    <template x-for="v in exGroup.variations" :key="v.id">
+                      <div class="variation-row" @click="openExerciseModal(v)">
+                        <div class="var-name" x-text="v.variation || 'Standard'"></div>
+                        <svg class="var-arrow" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- No results -->
+          <div class="empty-state" x-show="filteredExercises.length === 0 && !exercisesLoading">
+            <span x-show="exerciseSearch">No exercises match "<span x-text="exerciseSearch"></span>"</span>
+            <span x-show="!exerciseSearch">No exercises yet. Add one with the + button.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Tab -->
+      <div class="tab-pane" :class="{ active: activeTab === 'charts' }">
+        <div class="page-header">
+          <h2>Charts</h2>
+        </div>
+        <div class="placeholder">
+          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <h2>Progress Charts</h2>
+          <p>Visualize your strength gains over time.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- View Session (full screen overlay) -->
+    <div class="picker-overlay" x-show="viewSession">
+      <div class="picker-header">
+        <button class="modal-close" @click="viewSession = null">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h3 x-text="viewSession?.title || formatDateLong(viewSession?.date)"></h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn-finish" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)" @click="openCopyModal()">Copy</button>
+          <button class="btn-finish" @click="editViewSession()">Edit</button>
+        </div>
+      </div>
+      <div class="picker-body">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px" x-text="formatDateLong(viewSession?.date) + (viewSession?.location ? ' · ' + viewSession.location : '')"></div>
+
+        <div x-show="viewSessionLoading"><div class="spinner-lg"></div></div>
+
+        <template x-for="se in viewSessionExercises" :key="se.id">
+          <div class="session-ex-card" style="margin-bottom:12px">
+            <div class="session-ex-header">
+              <div>
+                <h4 x-text="se.expand?.exercise?.name"></h4>
+                <div class="variation-tag" x-show="se.expand?.exercise?.variation" x-text="se.expand?.exercise?.variation"></div>
+              </div>
+            </div>
+            <div class="sets-table">
+              <div class="sets-header" :style="viewSetGridStyle(se)">
+                <span class="set-num">#</span>
+                <span>Type</span>
+                <template x-if="true"><span style="text-align:center">Reps</span></template>
+                <template x-if="viewSetHasWeight(se)"><span style="text-align:center">lbs</span></template>
+                <template x-if="viewSetHasDuration(se)"><span style="text-align:center">Sec</span></template>
+                <span style="text-align:center">Top</span>
+                <span style="text-align:center">Fail</span>
+              </div>
+              <template x-for="(set, i) in se.sets" :key="i">
+                <div class="set-row" :style="viewSetGridStyle(se)">
+                  <span class="set-num" x-text="i + 1"></span>
+                  <span style="font-size:13px;font-weight:600;color:var(--text-muted);text-align:center" x-text="set.set_type === 'Body Weight' ? 'BW' : set.set_type === 'Isometric' ? 'Iso' : 'Wt'"></span>
+                  <span style="text-align:center;font-weight:600;font-size:15px" x-text="set.reps || '—'"></span>
+                  <template x-if="viewSetHasWeight(se)"><span style="text-align:center;font-weight:600;font-size:15px" x-text="set.weight || '—'"></span></template>
+                  <template x-if="viewSetHasDuration(se)"><span style="text-align:center;font-weight:600;font-size:15px" x-text="set.duration || '—'"></span></template>
+                  <span style="text-align:center;font-size:14px" x-text="set.top_set ? '🏆' : ''"></span>
+                  <span style="text-align:center;font-size:14px" x-text="set.to_failure ? '💪' : ''"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Copy Session Modal -->
+    <div class="modal-overlay" x-show="showCopyModal" @click.self="showCopyModal = false">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h3>Copy Session</h3>
+          <button class="modal-close" @click="showCopyModal = false">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <p style="font-size:14px;color:var(--text-muted)">Choose the date and time for the new session. All exercises and sets will be copied.</p>
+          <input type="datetime-local" x-model="copyDatetime" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;color-scheme:dark;text-align:center;" />
+          <button class="btn-primary" @click="confirmCopySession()" :disabled="copying || !copyDatetime">
+            <span x-show="!copying">Copy &amp; Start</span>
+            <span x-show="copying"><span class="spinner"></span></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Exercise Picker (full screen overlay) -->
+    <div class="picker-overlay" x-show="showExercisePicker">
+      <div class="picker-header">
+        <button class="modal-close" @click="showExercisePicker = false">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h3>Add Exercise</h3>
+      </div>
+      <div class="picker-body">
+        <div class="search-bar" style="margin-bottom:12px">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" placeholder="Search exercises…" x-model="pickerSearch" @input="filterPicker()" />
+        </div>
+
+        <template x-for="group in exerciseGroups" :key="group">
+          <div x-show="pickerGrouped[group] && pickerGrouped[group].length > 0">
+            <div class="group-label" x-text="group"></div>
+            <template x-for="exGroup in pickerGrouped[group]" :key="exGroup.name">
+              <div>
+                <div class="ex-header" @click="togglePickerAccordion(exGroup.name)">
+                  <div class="ex-name" x-text="exGroup.name"></div>
+                  <div class="ex-badge" x-show="exGroup.muscle" x-text="exGroup.muscle"></div>
+                  <svg class="ex-chevron" :class="{ open: openPickerAccordions[exGroup.name] }" viewBox="0 0 24 24">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </div>
+                <div class="variation-list" x-show="openPickerAccordions[exGroup.name]">
+                  <template x-for="v in exGroup.variations" :key="v.id">
+                    <div class="variation-row" @click="pickExercise(v)">
+                      <div class="var-name" x-text="v.variation || 'Standard'"></div>
+                      <svg class="var-arrow" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Add Exercise Modal -->
+    <div class="modal-overlay" x-show="showAddExercise" @click.self="showAddExercise = false">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <div class="modal-title">New Exercise</div>
+          <button class="modal-close" @click="showAddExercise = false">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <form @submit.prevent="saveExercise()" style="margin-top:16px">
+          <div class="form-field">
+            <label>Name *</label>
+            <input type="text" x-model="newExercise.name" placeholder="e.g. Bench Press" required />
+          </div>
+
+          <div class="form-field">
+            <label>Variation</label>
+            <input type="text" x-model="newExercise.variation" placeholder="e.g. Incline, Wide Grip…" />
+          </div>
+
+          <div class="form-field">
+            <label>Group</label>
+            <select x-model="newExercise.group">
+              <option value="">Select group…</option>
+              <template x-for="g in exerciseGroups" :key="g">
+                <option :value="g" x-text="g"></option>
+              </template>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label>Muscle</label>
+            <input type="text" x-model="newExercise.muscle" placeholder="e.g. Tricep, Hamstring…" />
+          </div>
+
+          <div class="form-field">
+            <label>Notes</label>
+            <textarea x-model="newExercise.notes" placeholder="Cues, tips, setup notes…"></textarea>
+          </div>
+
+          <div class="form-error" x-show="addExerciseError" x-text="addExerciseError"></div>
+
+          <button type="submit" class="btn-primary" :disabled="addExerciseLoading">
+            <span x-show="!addExerciseLoading">Save Exercise</span>
+            <span x-show="addExerciseLoading"><span class="btn-spinner"></span></span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Exercise Detail Modal -->
+    <div class="modal-overlay" x-show="selectedExercise" @click.self="closeExerciseModal()">
+      <div class="modal-sheet">
+
+        <!-- View mode -->
+        <div x-show="!editingExercise">
+          <div class="modal-header">
+            <div class="modal-title" x-text="selectedExercise?.name"></div>
+            <div style="display:flex;gap:8px">
+              <button class="modal-close" @click="startEditExercise()" title="Edit">
+                <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="modal-close" @click="closeExerciseModal()">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="modal-sub" x-text="selectedExercise?.variation || 'Standard'"></div>
+          <div x-show="selectedExercise?.muscle" style="margin-bottom:16px">
+            <div class="ex-badge" x-text="selectedExercise?.muscle"></div>
+          </div>
+          <div class="modal-section-label">Notes</div>
+          <div class="modal-notes" x-show="selectedExercise?.notes" x-text="selectedExercise?.notes"></div>
+          <div class="modal-no-notes" x-show="!selectedExercise?.notes">No notes for this exercise.</div>
+        </div>
+
+        <!-- Edit mode -->
+        <div x-show="editingExercise">
+          <div class="modal-header">
+            <div class="modal-title">Edit Exercise</div>
+            <button class="modal-close" @click="editingExercise = false">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <form @submit.prevent="updateExercise()" style="margin-top:16px">
+            <div class="form-field">
+              <label>Name *</label>
+              <input type="text" x-model="editExerciseForm.name" required />
+            </div>
+            <div class="form-field">
+              <label>Variation</label>
+              <input type="text" x-model="editExerciseForm.variation" />
+            </div>
+            <div class="form-field">
+              <label>Group</label>
+              <select x-model="editExerciseForm.group">
+                <option value="">Select group…</option>
+                <template x-for="g in exerciseGroups" :key="g">
+                  <option :value="g" x-text="g"></option>
+                </template>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Muscle</label>
+              <input type="text" x-model="editExerciseForm.muscle" />
+            </div>
+            <div class="form-field">
+              <label>Notes</label>
+              <textarea x-model="editExerciseForm.notes"></textarea>
+            </div>
+
+            <div class="form-error" x-show="editExerciseError" x-text="editExerciseError"></div>
+
+            <button type="submit" class="btn-primary" :disabled="editExerciseLoading" style="margin-bottom:10px">
+              <span x-show="!editExerciseLoading">Save Changes</span>
+              <span x-show="editExerciseLoading"><span class="btn-spinner"></span></span>
+            </button>
+
+            <button type="button" class="btn-delete" @click="deleteExercise()" :disabled="editExerciseLoading">
+              Retire Exercise
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+      <button class="nav-tab" :class="{ active: activeTab === 'log' }" @click="activeTab = 'log'">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+        Log
+      </button>
+      <button class="nav-tab" :class="{ active: activeTab === 'exercises' }" @click="switchTab('exercises')">
+        <svg viewBox="0 0 24 24"><path d="M6.5 6.5h11M6.5 17.5h11M4 12h16"/><circle cx="4" cy="6.5" r="1.5"/><circle cx="20" cy="6.5" r="1.5"/><circle cx="4" cy="17.5" r="1.5"/><circle cx="20" cy="17.5" r="1.5"/></svg>
+        Exercises
+      </button>
+      <button class="nav-tab" :class="{ active: activeTab === 'charts' }" @click="activeTab = 'charts'">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Charts
+      </button>
+    </nav>
+
+  </div>
+
+</div>
+
+<script>
+  const API = (typeof CONFIG !== 'undefined' ? CONFIG.API : 'http://localhost:8090/api');
+
+  function app() {
+    return {
+      // auth
+      loggedIn: false,
+      token: null,
+      user: null,
+      loginForm: { email: '', password: '' },
+      loginLoading: false,
+      loginError: '',
+
+      // navigation
+      activeTab: 'log',
+
+      // log tab — new session form
+      newSession: { datetime: '', location: '', title: '' },
+      sessionStarting: false,
+
+      // active session
+      activeSession: null,
+      activeSessionExercises: [],
+
+      // view-only session
+      viewSession: null,
+      viewSessionExercises: [],
+      viewSessionLoading: false,
+
+      // copy session modal
+      showCopyModal: false,
+      copyDatetime: '',
+      copying: false,
+
+      // session history
+      historyLoading: false,
+      recentSessions: [],
+      olderYears: [],
+      olderMonths: {},
+      olderSessions: {},
+      openHistoryMonths: {},
+
+      // exercise picker
+      showExercisePicker: false,
+      pickerSearch: '',
+      pickerGrouped: {},
+      openPickerAccordions: {},
+
+      // exercises tab
+      exercises: [],
+      filteredExercises: [],
+      exerciseSearch: '',
+      exercisesLoading: false,
+      exercisesError: '',
+      exerciseGroups: ['Arms', 'Back', 'Chest', 'Core', 'Legs', 'Shoulders'],
+      groupedExercises: {},
+      openAccordions: {},
+      selectedExercise: null,
+      editingExercise: false,
+      editExerciseForm: {},
+      editExerciseLoading: false,
+      editExerciseError: '',
+      showAddExercise: false,
+      newExercise: { name: '', variation: '', group: '', muscle: '', notes: '' },
+      addExerciseLoading: false,
+      addExerciseError: '',
+
+      init() {
+        const saved = localStorage.getItem('pb_token');
+        const savedUser = localStorage.getItem('pb_user');
+        if (saved && savedUser) {
+          this.token = saved;
+          this.user = JSON.parse(savedUser);
+          this.loggedIn = true;
+          this.loadHistory();
+          const activeId = localStorage.getItem('active_session_id');
+          if (activeId) this.resumeSessionById(activeId);
+        }
+        const now = new Date();
+        this.newSession.datetime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      },
+
+      async login() {
+        this.loginLoading = true;
+        this.loginError = '';
+        try {
+          const res = await fetch(`${API}/collections/users/auth-with-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              identity: this.loginForm.email,
+              password: this.loginForm.password,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            this.loginError = data?.message || 'Login failed. Check your credentials.';
+            return;
+          }
+          this.token = data.token;
+          this.user = data.record;
+          localStorage.setItem('pb_token', this.token);
+          localStorage.setItem('pb_user', JSON.stringify(this.user));
+          this.loggedIn = true;
+          this.loadHistory();
+        } catch (e) {
+          this.loginError = 'Network error. Check your connection.';
+        } finally {
+          this.loginLoading = false;
+        }
+      },
+
+      logout() {
+        this.loggedIn = false;
+        this.token = null;
+        this.user = null;
+        localStorage.removeItem('pb_token');
+        localStorage.removeItem('pb_user');
+      },
+
+      switchTab(tab) {
+        this.activeTab = tab;
+        if (tab === 'exercises' && this.exercises.length === 0) {
+          this.loadExercises();
+        }
+      },
+
+      async loadExercises() {
+        this.exercisesLoading = true;
+        this.exercisesError = '';
+        try {
+          const res = await fetch(
+            `${API}/collections/exercises/records?perPage=500&sort=group,name&filter=active_exercise=true`,
+            { headers: this.authHeaders() }
+          );
+          const data = await res.json();
+          if (!res.ok) {
+            this.exercisesError = data?.message || 'Failed to load exercises.';
+            return;
+          }
+          this.exercises = data.items;
+          this.filteredExercises = data.items;
+          this.buildGroups(data.items);
+        } catch (e) {
+          this.exercisesError = 'Network error. Check your connection.';
+        } finally {
+          this.exercisesLoading = false;
+        }
+      },
+
+      filterExercises() {
+        const q = this.exerciseSearch.toLowerCase().trim();
+        const filtered = q
+          ? this.exercises.filter(ex =>
+              ex.name.toLowerCase().includes(q) ||
+              (ex.variation || '').toLowerCase().includes(q) ||
+              (ex.muscle || '').toLowerCase().includes(q) ||
+              (ex.group || '').toLowerCase().includes(q)
+            )
+          : this.exercises;
+        this.filteredExercises = filtered;
+        this.buildGroups(filtered);
+      },
+
+      buildGroups(list) {
+        this.groupedExercises = this.buildGroupsFrom(list);
+        this.pickerGrouped = this.groupedExercises;
+      },
+
+      buildGroupsFrom(list) {
+        const byGroup = {};
+        for (const g of this.exerciseGroups) byGroup[g] = {};
+        for (const ex of list) {
+          const g = ex.group || 'Other';
+          if (!byGroup[g]) byGroup[g] = {};
+          if (!byGroup[g][ex.name]) byGroup[g][ex.name] = [];
+          byGroup[g][ex.name].push(ex);
+        }
+        const result = {};
+        for (const g of this.exerciseGroups) {
+          result[g] = Object.keys(byGroup[g]).sort().map(name => ({
+            name,
+            muscle: byGroup[g][name][0]?.muscle || '',
+            variations: byGroup[g][name],
+          }));
+        }
+        return result;
+      },
+
+      toggleAccordion(name) {
+        this.openAccordions = { ...this.openAccordions, [name]: !this.openAccordions[name] };
+      },
+
+      openExerciseModal(exercise) {
+        this.selectedExercise = exercise;
+        this.editingExercise = false;
+        this.editExerciseError = '';
+      },
+
+      closeExerciseModal() {
+        this.selectedExercise = null;
+        this.editingExercise = false;
+      },
+
+      startEditExercise() {
+        this.editExerciseForm = { ...this.selectedExercise };
+        this.editExerciseError = '';
+        this.editingExercise = true;
+      },
+
+      async updateExercise() {
+        this.editExerciseError = '';
+        if (this.isDuplicate(this.editExerciseForm.name, this.editExerciseForm.variation, this.editExerciseForm.id)) {
+          this.editExerciseError = 'An exercise with this name and variation already exists.';
+          return;
+        }
+        this.editExerciseLoading = true;
+        try {
+          const { id, name, variation, group, muscle, notes } = this.editExerciseForm;
+          const res = await fetch(`${API}/collections/exercises/records/${id}`, {
+            method: 'PATCH',
+            headers: this.authHeaders(),
+            body: JSON.stringify({ name, variation, group, muscle, notes }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            this.editExerciseError = data?.message || 'Failed to update exercise.';
+            return;
+          }
+          const idx = this.exercises.findIndex(e => e.id === id);
+          if (idx !== -1) this.exercises[idx] = data;
+          this.filterExercises();
+          this.selectedExercise = data;
+          this.editingExercise = false;
+        } catch (e) {
+          this.editExerciseError = 'Network error. Check your connection.';
+        } finally {
+          this.editExerciseLoading = false;
+        }
+      },
+
+      async deleteExercise() {
+        if (!confirm(`Retire "${this.selectedExercise.name}"? It will be hidden from the list.`)) return;
+        this.editExerciseLoading = true;
+        this.editExerciseError = '';
+        try {
+          const res = await fetch(`${API}/collections/exercises/records/${this.selectedExercise.id}`, {
+            method: 'PATCH',
+            headers: this.authHeaders(),
+            body: JSON.stringify({ active_exercise: false }),
+          });
+          if (!res.ok) {
+            const data = await res.json();
+            this.editExerciseError = data?.message || 'Failed to retire exercise.';
+            return;
+          }
+          this.exercises = this.exercises.filter(e => e.id !== this.selectedExercise.id);
+          this.filterExercises();
+          this.closeExerciseModal();
+        } catch (e) {
+          this.editExerciseError = 'Network error. Check your connection.';
+        } finally {
+          this.editExerciseLoading = false;
+        }
+      },
+
+      openAddExercise() {
+        this.newExercise = { name: '', variation: '', group: '', muscle: '', notes: '' };
+        this.addExerciseError = '';
+        this.showAddExercise = true;
+      },
+
+      isDuplicate(name, variation, excludeId = null) {
+        const n = name.trim().toLowerCase();
+        const v = (variation || '').trim().toLowerCase();
+        return this.exercises.some(e =>
+          e.id !== excludeId &&
+          e.name.toLowerCase() === n &&
+          (e.variation || '').toLowerCase() === v
+        );
+      },
+
+      async saveExercise() {
+        this.addExerciseError = '';
+        if (this.isDuplicate(this.newExercise.name, this.newExercise.variation)) {
+          this.addExerciseError = 'An exercise with this name and variation already exists.';
+          return;
+        }
+        this.addExerciseLoading = true;
+        try {
+          const res = await fetch(`${API}/collections/exercises/records`, {
+            method: 'POST',
+            headers: this.authHeaders(),
+            body: JSON.stringify({ ...this.newExercise, active_exercise: true }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            this.addExerciseError = data?.message || 'Failed to save exercise.';
+            return;
+          }
+          this.exercises.push(data);
+          this.filterExercises();
+          this.showAddExercise = false;
+        } catch (e) {
+          this.addExerciseError = 'Network error. Check your connection.';
+        } finally {
+          this.addExerciseLoading = false;
+        }
+      },
+
+      // ── Session history ──────────────────────────────────────
+      async loadHistory() {
+        this.historyLoading = true;
+        try {
+          const res = await fetch(
+            `${API}/collections/sessions/records?perPage=200&sort=-date&filter=user="${this.user.id}"`,
+            { headers: this.authHeaders() }
+          );
+          const data = await res.json();
+          if (!res.ok) return;
+
+          // fetch exercise counts for each session
+          const sessions = await Promise.all(data.items.map(async s => {
+            try {
+              const r = await fetch(
+                `${API}/collections/session_exercises/records?perPage=1&filter=session="${s.id}"`,
+                { headers: this.authHeaders() }
+              );
+              const d = await r.json();
+              s._exerciseCount = d.totalItems ?? 0;
+            } catch { s._exerciseCount = 0; }
+            return s;
+          }));
+
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - 14);
+
+          this.recentSessions = sessions.filter(s => new Date(s.date) >= cutoff);
+
+          const older = sessions.filter(s => new Date(s.date) < cutoff);
+          const byYear = {};
+          for (const s of older) {
+            const d = new Date(s.date);
+            const y = d.getFullYear();
+            const m = d.getMonth();
+            const key = `${y}-${m}`;
+            if (!byYear[y]) byYear[y] = new Set();
+            byYear[y].add(m);
+            if (!this.olderSessions[key]) this.olderSessions[key] = [];
+            this.olderSessions[key].push(s);
+          }
+          this.olderYears = Object.keys(byYear).sort((a, b) => b - a);
+          this.olderMonths = {};
+          for (const y of this.olderYears) {
+            this.olderMonths[y] = [...byYear[y]].sort((a, b) => b - a);
+          }
+        } finally {
+          this.historyLoading = false;
+        }
+      },
+
+      toggleHistoryMonth(year, month) {
+        const key = `${year}-${month}`;
+        this.openHistoryMonths = { ...this.openHistoryMonths, [key]: !this.openHistoryMonths[key] };
+      },
+
+      // ── Start / resume session ────────────────────────────────
+      async startSession() {
+        this.sessionStarting = true;
+        try {
+          const res = await fetch(`${API}/collections/sessions/records`, {
+            method: 'POST',
+            headers: this.authHeaders(),
+            body: JSON.stringify({
+              user: this.user.id,
+              date: (() => { const d = new Date(this.newSession.datetime); const p = n => String(n).padStart(2,'0'); return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:00`; })(),
+              location: this.newSession.location,
+              title: this.newSession.title,
+              completed: false,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return;
+          localStorage.setItem('active_session_id', data.id);
+          this.activeSession = data;
+          this.activeSessionExercises = [];
+          this.loadHistory();
+        } finally {
+          this.sessionStarting = false;
+        }
+      },
+
+      async resumeSessionById(id) {
+        try {
+          const res = await fetch(`${API}/collections/sessions/records/${id}`, { headers: this.authHeaders() });
+          if (!res.ok) { localStorage.removeItem('active_session_id'); return; }
+          const session = await res.json();
+          if (session.completed) { localStorage.removeItem('active_session_id'); return; }
+          this.activeSession = session;
+          await this.loadSessionExercises();
+        } catch { localStorage.removeItem('active_session_id'); }
+      },
+
+      async resumeSession(session) {
+        if (session.completed) {
+          await this.openViewSession(session);
+        } else {
+          localStorage.setItem('active_session_id', session.id);
+          this.activeSession = session;
+          await this.loadSessionExercises();
+        }
+      },
+
+      async openViewSession(session) {
+        this.viewSession = session;
+        this.viewSessionExercises = [];
+        this.viewSessionLoading = true;
+        const res = await fetch(
+          `${API}/collections/session_exercises/records?filter=session="${session.id}"&sort=order&expand=exercise&perPage=50`,
+          { headers: this.authHeaders() }
+        );
+        const data = await res.json();
+        if (res.ok) {
+          const seList = data.items;
+          await Promise.all(seList.map(async se => {
+            const r = await fetch(
+              `${API}/collections/sets/records?filter=session_exercise="${se.id}"&sort=set_number&perPage=50`,
+              { headers: this.authHeaders() }
+            );
+            const d = await r.json();
+            se.sets = r.ok ? d.items : [];
+          }));
+          this.viewSessionExercises = seList;
+        }
+        this.viewSessionLoading = false;
+      },
+
+      editViewSession() {
+        const session = this.viewSession;
+        this.viewSession = null;
+        localStorage.setItem('active_session_id', session.id);
+        this.activeSession = session;
+        this.activeSessionExercises = this.viewSessionExercises;
+        // add blank set to any exercise with no sets
+        this.activeSessionExercises.forEach(se => {
+          if (!se.sets || se.sets.length === 0) se.sets = [this.blankSet(se, 1)];
+          if (!se._lastSummary) se._lastSummary = [];
+        });
+        this.activeSessionExercises.forEach(se => this.fetchLastSummary(se));
+      },
+
+      openCopyModal() {
+        const now = new Date();
+        const p = n => String(n).padStart(2, '0');
+        this.copyDatetime = `${now.getFullYear()}-${p(now.getMonth()+1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`;
+        this.showCopyModal = true;
+      },
+
+      async confirmCopySession() {
+        this.copying = true;
+        try {
+          const source = this.viewSession;
+          const sourceSEs = this.viewSessionExercises;
+          const d = new Date(this.copyDatetime);
+          const p = n => String(n).padStart(2, '0');
+          const dateUTC = `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:00`;
+
+          // create new session
+          const sRes = await fetch(`${API}/collections/sessions/records`, {
+            method: 'POST',
+            headers: this.authHeaders(),
+            body: JSON.stringify({ user: this.user.id, date: dateUTC, location: source.location, title: source.title, completed: false }),
+          });
+          const newSession = await sRes.json();
+
+          // copy each exercise + its sets sequentially to preserve order
+          const newSEs = [];
+          for (const se of sourceSEs) {
+            const seRes = await fetch(`${API}/collections/session_exercises/records`, {
+              method: 'POST',
+              headers: this.authHeaders(),
+              body: JSON.stringify({ session: newSession.id, exercise: se.exercise, order: se.order }),
+            });
+            const newSE = await seRes.json();
+            newSE.expand = se.expand;
+            newSE.sets = [];
+            for (const set of se.sets) {
+              const setRes = await fetch(`${API}/collections/sets/records`, {
+                method: 'POST',
+                headers: this.authHeaders(),
+                body: JSON.stringify({ session_exercise: newSE.id, set_number: set.set_number, set_type: set.set_type, weight: set.weight, reps: set.reps, duration: set.duration, top_set: set.top_set, to_failure: set.to_failure }),
+              });
+              const newSet = await setRes.json();
+              newSE.sets.push(newSet);
+            }
+            newSEs.push(newSE);
+          }
+
+          // open as active session
+          this.showCopyModal = false;
+          this.viewSession = null;
+          localStorage.setItem('active_session_id', newSession.id);
+          this.activeSession = newSession;
+          this.activeSessionExercises = newSEs;
+          this.loadHistory();
+        } finally {
+          this.copying = false;
+        }
+      },
+
+      async loadSessionExercises() {
+        const res = await fetch(
+          `${API}/collections/session_exercises/records?filter=session="${this.activeSession.id}"&sort=order&expand=exercise&perPage=50`,
+          { headers: this.authHeaders() }
+        );
+        const data = await res.json();
+        if (!res.ok) return;
+        const seList = data.items;
+
+        // load sets for each session_exercise
+        await Promise.all(seList.map(async se => {
+          const r = await fetch(
+            `${API}/collections/sets/records?filter=session_exercise="${se.id}"&sort=set_number&perPage=50`,
+            { headers: this.authHeaders() }
+          );
+          const d = await r.json();
+          se.sets = r.ok ? d.items : [];
+          if (se.sets.length === 0) se.sets = [this.blankSet(se, 1)];
+          se._lastSummary = [];
+        }));
+
+        this.activeSessionExercises = seList;
+        seList.forEach(se => this.fetchLastSummary(se));
+      },
+
+      async finishSession() {
+        await fetch(`${API}/collections/sessions/records/${this.activeSession.id}`, {
+          method: 'PATCH',
+          headers: this.authHeaders(),
+          body: JSON.stringify({ completed: true }),
+        });
+        const finished = this.activeSession;
+        localStorage.removeItem('active_session_id');
+        this.activeSession = null;
+        this.activeSessionExercises = [];
+        this.loadHistory();
+        this.openViewSession({ ...finished, completed: true });
+      },
+
+      // ── Exercise picker ───────────────────────────────────────
+      openExercisePicker() {
+        if (this.exercises.length === 0) this.loadExercises();
+        this.pickerSearch = '';
+        this.openPickerAccordions = {};
+        this.pickerGrouped = this.groupedExercises;
+        this.showExercisePicker = true;
+      },
+
+      filterPicker() {
+        const q = this.pickerSearch.toLowerCase().trim();
+        if (!q) { this.pickerGrouped = this.groupedExercises; return; }
+        const filtered = this.exercises.filter(ex =>
+          ex.name.toLowerCase().includes(q) ||
+          (ex.variation || '').toLowerCase().includes(q) ||
+          (ex.muscle || '').toLowerCase().includes(q) ||
+          (ex.group || '').toLowerCase().includes(q)
+        );
+        this.pickerGrouped = this.buildGroupsFrom(filtered);
+      },
+
+      togglePickerAccordion(name) {
+        this.openPickerAccordions = { ...this.openPickerAccordions, [name]: !this.openPickerAccordions[name] };
+      },
+
+      async pickExercise(exercise) {
+        this.showExercisePicker = false;
+        const order = this.activeSessionExercises.length + 1;
+        const res = await fetch(`${API}/collections/session_exercises/records`, {
+          method: 'POST',
+          headers: this.authHeaders(),
+          body: JSON.stringify({ session: this.activeSession.id, exercise: exercise.id, order }),
+        });
+        const data = await res.json();
+        if (!res.ok) return;
+        data.expand = { exercise };
+        data.sets = [this.blankSet(data, 1)];
+        data._lastSummary = [];
+        this.activeSessionExercises.push(data);
+        this.fetchLastSummary(data);
+      },
+
+      async removeExerciseFromSession(se) {
+        if (!confirm('Remove this exercise from the session?')) return;
+        await fetch(`${API}/collections/session_exercises/records/${se.id}`, {
+          method: 'DELETE', headers: this.authHeaders(),
+        });
+        this.activeSessionExercises = this.activeSessionExercises.filter(e => e.id !== se.id);
+      },
+
+      async fetchLastSummary(se) {
+        const exId = se.exercise || se.expand?.exercise?.id;
+        if (!exId) return;
+        const filter = encodeURIComponent(`exercise="${exId}" && session != "${this.activeSession.id}"`);
+        const r = await fetch(
+          `${API}/collections/session_exercises/records?filter=${filter}&sort=-created&perPage=1`,
+          { headers: this.authHeaders() }
+        );
+        const d = await r.json();
+        if (!r.ok || !d.items.length) { se._lastSummary = []; return; }
+        const lastSE = d.items[0];
+        const r2 = await fetch(
+          `${API}/collections/sets/records?filter=session_exercise="${lastSE.id}"&sort=set_number&perPage=50`,
+          { headers: this.authHeaders() }
+        );
+        const d2 = await r2.json();
+        se._lastSummary = r2.ok ? this.formatSetSummary(d2.items) : [];
+      },
+
+      formatSetSummary(sets) {
+        const lines = [];
+        let i = 0;
+        while (i < sets.length) {
+          const type = sets[i].set_type;
+          const group = [];
+          while (i < sets.length && sets[i].set_type === type) { group.push(sets[i]); i++; }
+          if (type === 'Weighted') {
+            lines.push(group.map(s => s.reps || 0).join(', ') + ' @ ' + group.map(s => s.weight || 0).join(', ') + ' lbs');
+          } else if (type === 'Body Weight') {
+            lines.push(group.map(s => s.reps || 0).join(', '));
+          } else if (type === 'Isometric') {
+            lines.push(group.map(s => s.reps || 0).join(', ') + ' @ ' + group.map(s => s.duration || 0).join(', ') + 's');
+          }
+        }
+        return lines;
+      },
+
+      // ── Sets ──────────────────────────────────────────────────
+      blankSet(se, num) {
+        return { id: null, session_exercise: se.id, set_number: num, set_type: 'Weighted', weight: '', reps: '', duration: '', top_set: false, to_failure: false };
+      },
+
+      addSet(se) {
+        se.sets.push(this.blankSet(se, se.sets.length + 1));
+      },
+
+      async saveSet(se, set, idx) {
+        const payload = {
+          session_exercise: se.id,
+          set_number: idx + 1,
+          set_type: set.set_type,
+          weight: parseFloat(set.weight) || 0,
+          reps: parseInt(set.reps) || 0,
+          duration: parseInt(set.duration) || 0,
+          top_set: !!set.top_set,
+          to_failure: !!set.to_failure,
+        };
+        if (set.id) {
+          await fetch(`${API}/collections/sets/records/${set.id}`, {
+            method: 'PATCH', headers: this.authHeaders(), body: JSON.stringify(payload),
+          });
+        } else {
+          const res = await fetch(`${API}/collections/sets/records`, {
+            method: 'POST', headers: this.authHeaders(), body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (res.ok) set.id = data.id;
+        }
+      },
+
+      rebuildSetGrid(se) {
+        // force reactivity refresh when type changes
+        this.activeSessionExercises = [...this.activeSessionExercises];
+      },
+
+      setHasWeight(se) {
+        return se.sets.some(s => s.set_type === 'Weighted');
+      },
+
+      setHasReps(se) {
+        return se.sets.some(s => s.set_type === 'Weighted' || s.set_type === 'Body Weight' || s.set_type === 'Isometric');
+      },
+
+      setHasDuration(se) {
+        return se.sets.some(s => s.set_type === 'Isometric');
+      },
+
+      setGridStyle(se) {
+        const cols = ['28px', '46px'];
+        cols.push('1fr'); // reps always shown
+        if (this.setHasWeight(se)) cols.push('1fr');
+        if (this.setHasDuration(se)) cols.push('1fr');
+        cols.push('28px', '28px', '24px'); // top_set, to_failure, remove
+        return `display:grid;grid-template-columns:${cols.join(' ')}`;
+      },
+
+      async removeSet(se, set, idx) {
+        if (set.id) {
+          await fetch(`${API}/collections/sets/records/${set.id}`, {
+            method: 'DELETE', headers: this.authHeaders(),
+          });
+        }
+        se.sets.splice(idx, 1);
+        // renumber remaining sets
+        se.sets.forEach((s, i) => { s.set_number = i + 1; });
+        this.activeSessionExercises = [...this.activeSessionExercises];
+      },
+
+      viewSetHasWeight(se) { return se.sets.some(s => s.set_type === 'Weighted'); },
+      viewSetHasDuration(se) { return se.sets.some(s => s.set_type === 'Isometric'); },
+      viewSetGridStyle(se) {
+        const cols = ['28px', '36px'];
+        cols.push('1fr');
+        if (this.viewSetHasWeight(se)) cols.push('1fr');
+        if (this.viewSetHasDuration(se)) cols.push('1fr');
+        cols.push('28px', '36px');
+        return `display:grid;grid-template-columns:${cols.join(' ')}`;
+      },
+
+      // ── Date helpers ──────────────────────────────────────────
+      formatDay(dateStr) {
+        return new Date(dateStr).getUTCDate();
+      },
+
+      formatDow(dateStr) {
+        return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(dateStr).getUTCDay()];
+      },
+
+      formatDateLong(dateStr) {
+        if (!dateStr) return '';
+        return new Date(dateStr).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', timeZone:'UTC' });
+      },
+
+      monthName(m) {
+        return ['January','February','March','April','May','June','July','August','September','October','November','December'][m];
+      },
+
+      authHeaders() {
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': this.token,
+        };
+      },
+    };
+  }
+</script>
+</body>
+</html>
