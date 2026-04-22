@@ -2172,6 +2172,10 @@
 
       async removeExerciseFromSession(se) {
         if (!confirm('Remove this exercise from the session?')) return;
+        // delete all sets first, then the session_exercise
+        await Promise.all((se.sets || []).filter(s => s.id).map(s =>
+          fetch(`${API}/collections/sets/records/${s.id}`, { method: 'DELETE', headers: this.authHeaders() })
+        ));
         await fetch(`${API}/collections/session_exercises/records/${se.id}`, {
           method: 'DELETE', headers: this.authHeaders(),
         });
