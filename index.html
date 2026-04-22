@@ -16,8 +16,8 @@
       --surface: #1a1a1a;
       --surface2: #242424;
       --border: #2e2e2e;
-      --accent: #e8ff47;
-      --accent-dim: #b8cc30;
+      --accent: #7b7bc4;
+      --accent-dim: #545487;
       --text: #f0f0f0;
       --text-muted: #888;
       --danger: #ff4d4d;
@@ -115,7 +115,7 @@
       width: 100%;
       padding: 15px;
       background: var(--accent);
-      color: #0f0f0f;
+      color: #ffffff;
       font-size: 16px;
       font-weight: 700;
       border: none;
@@ -372,15 +372,15 @@
 
     /* ── Exercise group section ── */
     .group-label {
-      font-size: 11px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: var(--text-muted);
-      padding: 8px 0 6px;
-      border-bottom: 1px solid var(--border);
+      letter-spacing: 1px;
+      color: var(--accent);
+      padding: 10px 0 8px;
+      border-bottom: 2px solid var(--accent);
       margin-bottom: 4px;
-      margin-top: 20px;
+      margin-top: 28px;
     }
 
     /* ── Accordion exercise header ── */
@@ -761,7 +761,7 @@
     .btn-finish {
       padding: 8px 16px;
       background: var(--accent);
-      color: #0f0f0f;
+      color: #ffffff;
       font-size: 13px;
       font-weight: 700;
       border: none;
@@ -1147,9 +1147,10 @@
 
         <!-- ── Log home (no active session) ── -->
         <div x-show="!activeSession">
-          <div class="page-header">
-            <h2>Log</h2>
-          </div>
+          <div style="position:sticky;top:0;z-index:10;background:var(--bg);padding-bottom:4px;margin-bottom:0">
+            <div class="page-header">
+              <h2>Log</h2>
+            </div>
 
           <!-- Start new session -->
           <div class="session-card">
@@ -1173,6 +1174,7 @@
               <span x-show="sessionStarting"><span class="spinner"></span></span>
             </button>
           </div>
+          </div><!-- end sticky -->
 
           <!-- Session history -->
           <div x-show="historyLoading"><div class="spinner-lg"></div></div>
@@ -1214,8 +1216,8 @@
                             <div class="dow" x-text="formatDow(s.date)"></div>
                           </div>
                           <div class="session-info">
-                            <div class="session-location" x-text="s.location || 'No location'"></div>
-                            <div class="session-exercise-count" x-text="s._exerciseCount + ' exercise' + (s._exerciseCount === 1 ? '' : 's')"></div>
+                            <div class="session-location" x-text="s.title || formatDateLong(s.date)"></div>
+                            <div class="session-exercise-count" x-text="s._exerciseCount + ' exercise' + (s._exerciseCount === 1 ? '' : 's') + (s.location ? ' · ' + s.location : '')"></div>
                           </div>
                           <svg class="session-arrow" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
                         </div>
