@@ -151,7 +151,7 @@
       flex: 1;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 20px 16px;
+      padding: 12px 16px;
       padding-bottom: calc(var(--tab-h) + 16px);
     }
 
@@ -739,11 +739,14 @@
 
     /* ── Active session view ── */
     .session-header {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 16px;
-      margin-bottom: 16px;
+      flex-shrink: 0;
+      background: var(--bg);
+      padding: 14px 16px 12px;
+      border-bottom: 2px solid var(--accent);
+    }
+
+    .session-header-inner {
+      display: contents;
     }
 
     .session-header-top {
@@ -1053,6 +1056,17 @@
   <!-- ── Main App ── -->
   <div class="main-app" x-show="loggedIn" x-cloak>
 
+    <!-- Active session header (outside scroll area) -->
+    <div class="session-header" x-show="activeSession && activeTab === 'log'">
+      <div class="session-header-inner">
+        <div class="session-header-top">
+          <h3 x-text="activeSession?.title || formatDateLong(activeSession?.date)"></h3>
+          <button class="btn-finish" @click="finishSession()">Finish</button>
+        </div>
+        <div class="session-meta" x-text="formatDateLong(activeSession?.date) + (activeSession?.location ? ' · ' + activeSession.location : '')"></div>
+      </div>
+    </div>
+
     <!-- Tab Content -->
     <div class="tab-content">
 
@@ -1061,19 +1075,12 @@
 
         <!-- ── Active session view ── -->
         <div x-show="activeSession">
-          <div class="session-header">
-            <div class="session-header-top">
-              <h3 x-text="activeSession?.title || formatDateLong(activeSession?.date)"></h3>
-              <button class="btn-finish" @click="finishSession()">Finish</button>
-            </div>
-            <div class="session-meta" x-text="formatDateLong(activeSession?.date) + (activeSession?.location ? ' · ' + activeSession.location : '')"></div>
-          </div>
 
           <!-- Exercise cards -->
           <template x-for="se in activeSessionExercises" :key="se.id">
             <div class="session-ex-card">
               <div class="session-ex-header">
-                <div>
+                <div style="flex:1">
                   <h4 x-text="se.expand?.exercise?.name"></h4>
                   <div class="variation-tag" x-show="se.expand?.exercise?.variation" x-text="se.expand?.exercise?.variation"></div>
                 </div>
@@ -2084,6 +2091,7 @@
           this.activeSession = newSession;
           this.activeSessionExercises = newSEs;
           this.loadHistory();
+          newSEs.forEach(se => this.fetchLastSummary(se));
         } finally {
           this.copying = false;
         }
@@ -2198,7 +2206,10 @@
           { headers: this.authHeaders() }
         );
         const d2 = await r2.json();
-        se._lastSummary = r2.ok ? this.formatSetSummary(d2.items) : [];
+        const summary = r2.ok ? this.formatSetSummary(d2.items) : [];
+        this.activeSessionExercises = this.activeSessionExercises.map(e =>
+          e.id === se.id ? { ...e, _lastSummary: summary } : e
+        );
       },
 
       formatSetSummary(sets) {
