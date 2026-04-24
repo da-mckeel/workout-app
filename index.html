@@ -1069,9 +1069,9 @@
 
     <!-- Log home header (outside scroll area) -->
     <div class="log-home-header" x-show="!activeSession && activeTab === 'log'">
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <input type="text" placeholder="Title (e.g. Push Day)" x-model="newSession.title" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;text-align:center;" />
-        <input type="datetime-local" x-model="newSession.datetime" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;color-scheme:dark;text-align:center;" />
+      <div style="display:flex;flex-direction:column;gap:10px;overflow:hidden">
+        <input type="text" placeholder="Title (e.g. Push Day)" x-model="newSession.title" style="width:100%;min-width:0;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;text-align:center;" />
+        <input type="datetime-local" x-model="newSession.datetime" style="width:100%;min-width:0;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;color-scheme:dark;text-align:center;-webkit-appearance:none;appearance:none;" />
         <select x-model="newSession.location" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;appearance:none;text-align:center;text-align-last:center;">
           <option value="">Location…</option>
           <option>Home</option>
@@ -1089,15 +1089,15 @@
 
     <!-- Active session header (outside scroll area) -->
     <div class="session-header" x-show="activeSession && activeTab === 'log'">
-      <div class="session-header-inner">
-        <div class="session-header-top">
-          <h3 x-text="activeSession?.title || formatDateLong(activeSession?.date)"></h3>
-          <button class="btn-finish" @click="finishSession()">Finish</button>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="flex:1;min-width:0;cursor:pointer;padding:2px 0" @click="openEditSessionModal()">
+          <h3 style="font-size:16px;font-weight:800" x-text="activeSession?.title || formatDateLong(activeSession?.date)"></h3>
+          <div class="session-meta" style="margin-top:4px" x-text="formatDateLong(activeSession?.date) + (activeSession?.location ? ' · ' + activeSession.location : '')"></div>
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
-          <div class="session-meta" x-text="formatDateLong(activeSession?.date) + (activeSession?.location ? ' · ' + activeSession.location : '')"></div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+          <button class="btn-finish" @click="finishSession()">Finish</button>
           <template x-if="!editingTimer">
-            <span @click="openTimerEdit()" style="font-size:15px;font-weight:700;color:var(--accent);letter-spacing:1px;cursor:pointer;font-variant-numeric:tabular-nums;padding:4px 8px" x-text="formatTimer(sessionTimer)"></span>
+            <span @click.stop="openTimerEdit()" style="font-size:15px;font-weight:700;color:var(--accent);letter-spacing:1px;cursor:pointer;font-variant-numeric:tabular-nums;padding:4px 8px" x-text="formatTimer(sessionTimer)"></span>
           </template>
           <template x-if="editingTimer">
             <input x-ref="timerInput" type="text" x-model="timerEditValue" @blur="commitTimerEdit()" @keydown.enter="commitTimerEdit()" @keydown.escape="editingTimer=false" style="width:80px;background:var(--surface2);border:1.5px solid var(--accent);border-radius:6px;color:var(--accent);font-size:14px;font-weight:700;text-align:center;padding:2px 6px;outline:none;font-variant-numeric:tabular-nums" />
@@ -1424,6 +1424,33 @@
       </div>
     </div>
 
+    <!-- Edit Session Modal -->
+    <div class="modal-overlay" x-show="showEditSessionModal" @click.self="showEditSessionModal = false">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h3>Edit Session</h3>
+          <button class="modal-close" @click="showEditSessionModal = false">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <input type="text" placeholder="Title (e.g. Push Day)" x-model="editSessionForm.title" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;text-align:center;" />
+          <input type="datetime-local" x-model="editSessionForm.datetime" style="width:100%;min-width:0;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;color-scheme:dark;text-align:center;-webkit-appearance:none;appearance:none;" />
+          <select x-model="editSessionForm.location" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;appearance:none;text-align:center;text-align-last:center;">
+            <option value="">Location…</option>
+            <option>Home</option>
+            <option>UFC</option>
+            <option>Workout Anytime</option>
+            <option>Travel</option>
+          </select>
+          <button class="btn-primary" @click="saveEditSession()" :disabled="editSessionSaving">
+            <span x-show="!editSessionSaving">Save</span>
+            <span x-show="editSessionSaving"><span class="spinner"></span></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Reorder Exercise Modal -->
     <div class="modal-overlay" x-show="reorderTarget" @click.self="reorderTarget = null">
       <div class="modal-sheet" style="max-width:340px">
@@ -1683,6 +1710,11 @@
       showCopyModal: false,
       copyDatetime: '',
       copying: false,
+
+      // edit session modal
+      showEditSessionModal: false,
+      editSessionForm: { title: '', datetime: '', location: '' },
+      editSessionSaving: false,
 
       // reorder exercises modal
       reorderTarget: null,
@@ -2242,6 +2274,44 @@
         else if (parts.length === 2) secs = parts[0] * 60 + parts[1];
         if (!isNaN(secs) && secs >= 0) this.sessionTimer = secs;
         this.editingTimer = false;
+      },
+
+      utcToLocalInput(dateStr) {
+        if (!dateStr) return '';
+        let iso = dateStr.replace(' ', 'T');
+        if (!iso.endsWith('Z')) iso += 'Z';
+        const d = new Date(iso);
+        const p = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+      },
+
+      openEditSessionModal() {
+        this.editSessionForm = {
+          title: this.activeSession.title || '',
+          datetime: this.utcToLocalInput(this.activeSession.date),
+          location: this.activeSession.location || '',
+        };
+        this.showEditSessionModal = true;
+      },
+
+      async saveEditSession() {
+        this.editSessionSaving = true;
+        try {
+          const p = n => String(n).padStart(2, '0');
+          const d = new Date(this.editSessionForm.datetime);
+          const dateUTC = `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:00`;
+          const res = await fetch(`${API}/collections/sessions/records/${this.activeSession.id}`, {
+            method: 'PATCH',
+            headers: this.authHeaders(),
+            body: JSON.stringify({ title: this.editSessionForm.title, location: this.editSessionForm.location, date: dateUTC }),
+          });
+          if (res.ok) {
+            this.activeSession = { ...this.activeSession, title: this.editSessionForm.title, location: this.editSessionForm.location, date: dateUTC };
+            this.showEditSessionModal = false;
+          }
+        } finally {
+          this.editSessionSaving = false;
+        }
       },
 
       async finishSession() {
