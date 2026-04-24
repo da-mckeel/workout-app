@@ -1063,7 +1063,15 @@
           <h3 x-text="activeSession?.title || formatDateLong(activeSession?.date)"></h3>
           <button class="btn-finish" @click="finishSession()">Finish</button>
         </div>
-        <div class="session-meta" x-text="formatDateLong(activeSession?.date) + (activeSession?.location ? ' · ' + activeSession.location : '')"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+          <div class="session-meta" x-text="formatDateLong(activeSession?.date) + (activeSession?.location ? ' · ' + activeSession.location : '')"></div>
+          <template x-if="!editingTimer">
+            <span @click="openTimerEdit()" style="font-size:15px;font-weight:700;color:var(--accent);letter-spacing:1px;cursor:pointer;font-variant-numeric:tabular-nums" x-text="formatTimer(sessionTimer)"></span>
+          </template>
+          <template x-if="editingTimer">
+            <input x-ref="timerInput" type="text" x-model="timerEditValue" @blur="commitTimerEdit()" @keydown.enter="commitTimerEdit()" @keydown.escape="editingTimer=false" style="width:80px;background:var(--surface2);border:1.5px solid var(--accent);border-radius:6px;color:var(--accent);font-size:14px;font-weight:700;text-align:center;padding:2px 6px;outline:none;font-variant-numeric:tabular-nums" />
+          </template>
+        </div>
       </div>
     </div>
 
@@ -1346,7 +1354,10 @@
             </button>
           </div>
         </div>
-        <div class="session-meta" x-text="formatDateLong(viewSession?.date) + (viewSession?.location ? ' · ' + viewSession.location : '')"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-right:44px">
+          <div class="session-meta" x-text="formatDateLong(viewSession?.date) + (viewSession?.location ? ' · ' + viewSession.location : '')"></div>
+          <span x-show="viewSession?.session_length" style="font-size:15px;font-weight:700;color:var(--accent);letter-spacing:1px;font-variant-numeric:tabular-nums" x-text="formatTimer(viewSession?.session_length || 0)"></span>
+        </div>
       </div>
       <div class="picker-body">
 
@@ -1620,6 +1631,10 @@
       // active session
       activeSession: null,
       activeSessionExercises: [],
+      sessionTimer: 0,
+      sessionTimerInterval: null,
+      editingTimer: false,
+      timerEditValue: '',
 
       // view-only session
       viewSession: null,
@@ -1984,6 +1999,7 @@
           this.activeSession = data;
           this.activeSessionExercises = [];
           this.loadHistory();
+          this.startTimer();
         } finally {
           this.sessionStarting = false;
         }
@@ -1997,6 +2013,7 @@
           if (session.completed) { localStorage.removeItem('active_session_id'); return; }
           this.activeSession = session;
           await this.loadSessionExercises();
+          this.startTimer();
         } catch { localStorage.removeItem('active_session_id'); }
       },
 
@@ -2007,6 +2024,7 @@
           localStorage.setItem('active_session_id', session.id);
           this.activeSession = session;
           await this.loadSessionExercises();
+          this.startTimer();
         }
       },
 
@@ -2047,6 +2065,7 @@
           if (se._collapsed === undefined) se._collapsed = false;
         });
         this.activeSessionExercises.forEach(se => this.fetchLastSummary(se));
+        this.startTimer();
       },
 
       openCopyModal() {
@@ -2106,6 +2125,7 @@
           this.activeSessionExercises = newSEs;
           this.loadHistory();
           newSEs.forEach(se => this.fetchLastSummary(se));
+          this.startTimer();
         } finally {
           this.copying = false;
         }
@@ -2137,18 +2157,60 @@
         seList.forEach(se => this.fetchLastSummary(se));
       },
 
+      startTimer() {
+        clearInterval(this.sessionTimerInterval);
+        if (this.activeSession.session_length) {
+          this.sessionTimer = this.activeSession.session_length;
+        } else {
+          const start = new Date(this.activeSession.date.replace(' ', 'T') + 'Z');
+          const elapsed = Math.floor((Date.now() - start.getTime()) / 1000);
+          this.sessionTimer = isNaN(elapsed) ? 0 : Math.min(Math.max(0, elapsed), 7200);
+        }
+        this.sessionTimerInterval = setInterval(() => { this.sessionTimer++; }, 1000);
+      },
+
+      stopTimer() {
+        clearInterval(this.sessionTimerInterval);
+        this.sessionTimerInterval = null;
+      },
+
+      formatTimer(s) {
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        const p = n => String(n).padStart(2, '0');
+        return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
+      },
+
+      openTimerEdit() {
+        this.timerEditValue = this.formatTimer(this.sessionTimer);
+        this.editingTimer = true;
+        this.$nextTick(() => this.$refs.timerInput?.select());
+      },
+
+      commitTimerEdit() {
+        const parts = this.timerEditValue.trim().split(':').map(Number);
+        let secs = 0;
+        if (parts.length === 3) secs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        else if (parts.length === 2) secs = parts[0] * 60 + parts[1];
+        if (!isNaN(secs) && secs >= 0) this.sessionTimer = secs;
+        this.editingTimer = false;
+      },
+
       async finishSession() {
+        this.stopTimer();
         await fetch(`${API}/collections/sessions/records/${this.activeSession.id}`, {
           method: 'PATCH',
           headers: this.authHeaders(),
-          body: JSON.stringify({ completed: true }),
+          body: JSON.stringify({ completed: true, session_length: this.sessionTimer }),
         });
-        const finished = this.activeSession;
+        const finished = { ...this.activeSession, completed: true, session_length: this.sessionTimer };
         localStorage.removeItem('active_session_id');
         this.activeSession = null;
         this.activeSessionExercises = [];
+        this.sessionTimer = 0;
         this.loadHistory();
-        this.openViewSession({ ...finished, completed: true });
+        this.openViewSession(finished);
       },
 
       // ── Exercise picker ───────────────────────────────────────
