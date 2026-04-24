@@ -745,6 +745,17 @@
       border-bottom: 2px solid var(--accent);
     }
 
+    .log-home-header {
+      flex-shrink: 0;
+      background: var(--bg);
+      padding: 14px 16px 16px;
+      border-bottom: 2px solid var(--accent);
+    }
+
+    .log-home-header .session-card {
+      margin-bottom: 0;
+    }
+
     .session-header-inner {
       display: contents;
     }
@@ -1056,6 +1067,26 @@
   <!-- ── Main App ── -->
   <div class="main-app" x-show="loggedIn" x-cloak>
 
+    <!-- Log home header (outside scroll area) -->
+    <div class="log-home-header" x-show="!activeSession && activeTab === 'log'">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <input type="text" placeholder="Title (e.g. Push Day)" x-model="newSession.title" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;text-align:center;" />
+        <input type="datetime-local" x-model="newSession.datetime" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;color-scheme:dark;text-align:center;" />
+        <select x-model="newSession.location" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;appearance:none;text-align:center;text-align-last:center;">
+          <option value="">Location…</option>
+          <option>Home</option>
+          <option>UFC</option>
+          <option>Workout Anytime</option>
+          <option>Travel</option>
+        </select>
+        <div class="form-error" x-show="startSessionError" x-text="startSessionError"></div>
+        <button class="btn-primary" @click="startSession()" :disabled="sessionStarting">
+          <span x-show="!sessionStarting">Start Session</span>
+          <span x-show="sessionStarting"><span class="spinner"></span></span>
+        </button>
+      </div>
+    </div>
+
     <!-- Active session header (outside scroll area) -->
     <div class="session-header" x-show="activeSession && activeTab === 'log'">
       <div class="session-header-inner">
@@ -1174,34 +1205,6 @@
 
         <!-- ── Log home (no active session) ── -->
         <div x-show="!activeSession">
-          <div style="position:sticky;top:0;z-index:10;background:var(--bg);padding-bottom:4px;margin-bottom:0">
-            <div class="page-header">
-              <h2>Log</h2>
-            </div>
-
-          <!-- Start new session -->
-          <div class="session-card">
-            <div class="row">
-              <input type="text" placeholder="Title (e.g. Push Day)" x-model="newSession.title" style="flex:1;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;text-align:center;" />
-            </div>
-            <div class="row">
-              <input type="datetime-local" x-model="newSession.datetime" style="flex:1;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;color-scheme:dark;text-align:center;" />
-            </div>
-            <div class="row">
-              <select x-model="newSession.location">
-                <option value="">Location…</option>
-                <option>Home</option>
-                <option>UFC</option>
-                <option>Workout Anytime</option>
-                <option>Travel</option>
-              </select>
-            </div>
-            <button class="btn-primary" @click="startSession()" :disabled="sessionStarting">
-              <span x-show="!sessionStarting">Start Session</span>
-              <span x-show="sessionStarting"><span class="spinner"></span></span>
-            </button>
-          </div>
-          </div><!-- end sticky -->
 
           <!-- Session history -->
           <div x-show="historyLoading"><div class="spinner-lg"></div></div>
@@ -1661,6 +1664,7 @@
       // log tab — new session form
       newSession: { datetime: '', location: '', title: '' },
       sessionStarting: false,
+      startSessionError: '',
 
       // active session
       activeSession: null,
@@ -2017,6 +2021,12 @@
 
       // ── Start / resume session ────────────────────────────────
       async startSession() {
+        this.startSessionError = '';
+        const noTitle = !this.newSession.title.trim();
+        const noLocation = !this.newSession.location;
+        if (noTitle && noLocation) { this.startSessionError = 'Please enter a title and location.'; return; }
+        if (noTitle) { this.startSessionError = 'Please enter a session title.'; return; }
+        if (noLocation) { this.startSessionError = 'Please select a location.'; return; }
         this.sessionStarting = true;
         try {
           const res = await fetch(`${API}/collections/sessions/records`, {
