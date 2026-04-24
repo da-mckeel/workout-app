@@ -1066,7 +1066,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
           <div class="session-meta" x-text="formatDateLong(activeSession?.date) + (activeSession?.location ? ' · ' + activeSession.location : '')"></div>
           <template x-if="!editingTimer">
-            <span @click="openTimerEdit()" style="font-size:15px;font-weight:700;color:var(--accent);letter-spacing:1px;cursor:pointer;font-variant-numeric:tabular-nums" x-text="formatTimer(sessionTimer)"></span>
+            <span @click="openTimerEdit()" style="font-size:15px;font-weight:700;color:var(--accent);letter-spacing:1px;cursor:pointer;font-variant-numeric:tabular-nums;padding:4px 8px" x-text="formatTimer(sessionTimer)"></span>
           </template>
           <template x-if="editingTimer">
             <input x-ref="timerInput" type="text" x-model="timerEditValue" @blur="commitTimerEdit()" @keydown.enter="commitTimerEdit()" @keydown.escape="editingTimer=false" style="width:80px;background:var(--surface2);border:1.5px solid var(--accent);border-radius:6px;color:var(--accent);font-size:14px;font-weight:700;text-align:center;padding:2px 6px;outline:none;font-variant-numeric:tabular-nums" />
@@ -1095,7 +1095,10 @@
                   <h4 x-text="se.expand?.exercise?.name"></h4>
                   <div class="variation-tag" x-show="se.expand?.exercise?.variation" x-text="se.expand?.exercise?.variation"></div>
                 </div>
-                <button class="btn-icon-sm" @click.stop="removeExerciseFromSession(se)" title="Remove">
+                <button class="btn-icon-sm" @click.stop="openReorder(se)" title="Reorder" x-show="activeSessionExercises.length > 1">
+                  <svg viewBox="0 0 24 24" style="stroke-linecap:round;stroke-linejoin:round"><polyline points="7 10 12 5 17 10"/><polyline points="7 14 12 19 17 14"/></svg>
+                </button>
+                <button class="modal-close" style="width:28px;height:28px" @click.stop="removeExerciseFromSession(se)" title="Remove">
                   <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
@@ -1418,6 +1421,34 @@
       </div>
     </div>
 
+    <!-- Reorder Exercise Modal -->
+    <div class="modal-overlay" x-show="reorderTarget" @click.self="reorderTarget = null">
+      <div class="modal-sheet" style="max-width:340px">
+        <div class="modal-header">
+          <div>
+            <h3 style="font-size:17px;font-weight:800">Move Exercise</h3>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:2px" x-text="reorderTarget?.expand?.exercise?.name + (reorderTarget?.expand?.exercise?.variation ? ' · ' + reorderTarget?.expand?.exercise?.variation : '')"></div>
+          </div>
+          <button class="modal-close" @click="reorderTarget = null">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+          <template x-if="activeSessionExercises[0]?.id !== reorderTarget?.id">
+            <button @click="moveExercise(null)" style="text-align:left;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer">
+              Move to first
+            </button>
+          </template>
+          <template x-for="se in activeSessionExercises.filter(e => e.id !== reorderTarget?.id)" :key="se.id">
+            <button @click="moveExercise(se)" style="text-align:left;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);cursor:pointer">
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);display:block;margin-bottom:2px">After</span>
+              <span style="font-size:15px;font-weight:600" x-text="se.expand?.exercise?.name + (se.expand?.exercise?.variation ? ' · ' + se.expand?.exercise?.variation : '')"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+
     <!-- Exercise Picker (full screen overlay) -->
     <div class="picker-overlay" x-show="showExercisePicker">
       <div class="picker-header">
@@ -1425,6 +1456,9 @@
           <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
         <h3>Add Exercise</h3>
+        <button class="btn-icon" @click="openAddExercise()" title="Create new exercise">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
       </div>
       <div class="picker-body">
         <div class="search-bar" style="margin-bottom:12px">
@@ -1645,6 +1679,9 @@
       showCopyModal: false,
       copyDatetime: '',
       copying: false,
+
+      // reorder exercises modal
+      reorderTarget: null,
 
       // session history
       historyLoading: false,
@@ -2266,6 +2303,31 @@
           method: 'DELETE', headers: this.authHeaders(),
         });
         this.activeSessionExercises = this.activeSessionExercises.filter(e => e.id !== se.id);
+      },
+
+      openReorder(se) {
+        this.reorderTarget = se;
+      },
+
+      async moveExercise(afterSe) {
+        const moving = this.reorderTarget;
+        this.reorderTarget = null;
+        const rest = this.activeSessionExercises.filter(e => e.id !== moving.id);
+        let newArr;
+        if (afterSe === null) {
+          newArr = [moving, ...rest];
+        } else {
+          const idx = rest.findIndex(e => e.id === afterSe.id);
+          newArr = [...rest.slice(0, idx + 1), moving, ...rest.slice(idx + 1)];
+        }
+        this.activeSessionExercises = newArr;
+        await Promise.all(newArr.map((se, i) =>
+          fetch(`${API}/collections/session_exercises/records/${se.id}`, {
+            method: 'PATCH',
+            headers: this.authHeaders(),
+            body: JSON.stringify({ order: i + 1 }),
+          })
+        ));
       },
 
       async fetchLastSummary(se) {
