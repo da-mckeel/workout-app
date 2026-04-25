@@ -8,6 +8,7 @@
   <link rel="manifest" href="/manifest.json" />
   <script src="/config.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -334,6 +335,41 @@
       animation: spin 0.7s linear infinite;
       margin: 48px auto;
       display: block;
+    }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .stat-cell {
+      background: var(--surface);
+      padding: 18px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+    .stat-value {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1;
+      letter-spacing: -0.5px;
+    }
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      text-align: center;
     }
 
     /* ── Search bar ── */
@@ -1336,13 +1372,106 @@
       <!-- Charts Tab -->
       <div class="tab-pane" :class="{ active: activeTab === 'charts' }">
         <div class="page-header">
-          <h2>Charts</h2>
+          <h2>Lifting Stats &amp; Progression</h2>
         </div>
-        <div class="placeholder">
-          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          <h2>Progress Charts</h2>
-          <p>Visualize your strength gains over time.</p>
+
+        <!-- Location slicer -->
+        <select x-model="chartsLocation" @change="loadChartStats(); loadMuscleChart(); load5RM()" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;appearance:none;text-align:center;text-align-last:center;margin-bottom:16px;">
+          <option value="">All Locations</option>
+          <template x-for="loc in chartLocations" :key="loc">
+            <option :value="loc" x-text="loc"></option>
+          </template>
+        </select>
+
+        <!-- Lifetime Stats -->
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:8px">Lifetime Stats</div>
+        <div x-show="chartsStatsLoading" style="text-align:center"><span class="spinner-lg"></span></div>
+        <div class="stats-grid" x-show="chartsStats && !chartsStatsLoading">
+          <div class="stat-cell">
+            <div class="stat-value" x-text="chartsStats ? formatVolume(chartsStats.volume) : '—'"></div>
+            <div class="stat-label">lbs lifted</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-value" x-text="chartsStats ? formatNumber(chartsStats.reps) : '—'"></div>
+            <div class="stat-label">total reps</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-value" x-text="chartsStats ? chartsStats.sessions : '—'"></div>
+            <div class="stat-label">sessions</div>
+          </div>
         </div>
+
+        <!-- Failure Sets by Muscle Group -->
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:8px;margin-top:24px">Failure Sets by Muscle Group</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <template x-for="tf in [{v:'30d',l:'30d'},{v:'90d',l:'90d'},{v:'1y',l:'1yr'},{v:'all',l:'All'}]" :key="tf.v">
+            <button @click="muscleTimeFilter = tf.v; loadMuscleChart()"
+              :style="'flex:1;padding:7px 0;border-radius:8px;font-size:13px;font-weight:700;border:1.5px solid;cursor:pointer;' + (muscleTimeFilter === tf.v ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : 'background:var(--surface2);color:var(--text-muted);border-color:var(--border)')"
+              x-text="tf.l"></button>
+          </template>
+        </div>
+        <div x-show="muscleLoading" style="text-align:center"><span class="spinner-lg"></span></div>
+        <div x-show="!muscleLoading && muscleData && muscleData.length === 0" style="text-align:center;padding:16px 0;color:var(--text-muted);font-size:14px">No failure set data found.</div>
+        <div x-show="muscleData && muscleData.length > 0 && !muscleLoading">
+          <!-- Donut + Legend side by side -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;justify-content:center;gap:16px">
+              <div style="width:180px;height:180px;flex-shrink:0;position:relative">
+                <canvas id="muscleCanvas"></canvas>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <template x-for="item in muscleData" :key="item.label">
+                  <div @click="muscleSelectedGroup = muscleSelectedGroup === item.label ? null : item.label"
+                    :style="'display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;cursor:pointer;transition:background 0.15s;' + (muscleSelectedGroup === item.label ? 'background:var(--surface2)' : '')">
+                    <div :style="'width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + item.color"></div>
+                    <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap" x-text="item.label + ' · ' + item.count + ' sets'"></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+          <!-- Breakdown table — only when a group is selected -->
+          <div x-show="muscleSelectedGroup" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:10px">
+            <template x-if="muscleSelectedGroup">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)">
+                  <div :style="'width:10px;height:10px;border-radius:50%;flex-shrink:0;background:' + (muscleData.find(d=>d.label===muscleSelectedGroup)?.color || '#888')"></div>
+                  <span style="font-size:14px;font-weight:800;color:var(--text)" x-text="muscleSelectedGroup"></span>
+                  <span style="font-size:12px;color:var(--text-muted)" x-text="'· ' + muscleData.find(d=>d.label===muscleSelectedGroup)?.pct + '%'"></span>
+                </div>
+                <template x-for="m in muscleData.find(d=>d.label===muscleSelectedGroup)?.muscles || []" :key="m.label">
+                  <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.04)">
+                    <div style="flex:1;font-size:13px;color:var(--text-muted)" x-text="m.label"></div>
+                    <div style="font-size:13px;color:var(--text-muted)" x-text="m.count + ' sets'"></div>
+                    <div style="font-size:13px;font-weight:700;color:var(--text);min-width:40px;text-align:right" x-text="Math.round(m.count / muscleData.find(d=>d.label===muscleSelectedGroup).count * 100) + '%'"></div>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Adjusted 5RM Chart -->
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:8px;margin-top:24px">Adjusted 5 Rep Max</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+          <select x-model="e5rmExerciseId" @change="load5RM()" style="width:100%;padding:11px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;appearance:none;text-align:center;text-align-last:center;">
+            <option value="">Select exercise…</option>
+            <template x-for="ex in e5rmExerciseList" :key="ex.id">
+              <option :value="ex.id" x-text="ex.name + (ex.variation ? ' · ' + ex.variation : '')"></option>
+            </template>
+          </select>
+        </div>
+
+        <div x-show="e5rmLoading" style="text-align:center"><span class="spinner-lg"></span></div>
+
+        <div x-show="e5rmExerciseId && !e5rmLoading && e5rmPoints.length === 0" style="text-align:center;padding:24px 0;color:var(--text-muted);font-size:14px">
+          No top-set failure data found for this exercise.
+        </div>
+
+        <div x-show="e5rmPoints.length > 0 && !e5rmLoading" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">
+          <canvas id="e5rmCanvas" style="width:100%;height:220px;display:block"></canvas>
+        </div>
+
       </div>
 
     </div>
@@ -1662,7 +1791,7 @@
         <svg viewBox="0 0 24 24"><path d="M6.5 6.5h11M6.5 17.5h11M4 12h16"/><circle cx="4" cy="6.5" r="1.5"/><circle cx="20" cy="6.5" r="1.5"/><circle cx="4" cy="17.5" r="1.5"/><circle cx="20" cy="17.5" r="1.5"/></svg>
         Exercises
       </button>
-      <button class="nav-tab" :class="{ active: activeTab === 'charts' }" @click="activeTab = 'charts'">
+      <button class="nav-tab" :class="{ active: activeTab === 'charts' }" @click="switchTab('charts')">
         <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Charts
       </button>
@@ -1698,6 +1827,7 @@
       activeSessionExercises: [],
       sessionTimer: 0,
       sessionTimerInterval: null,
+      timerOrigin: 0,
       editingTimer: false,
       timerEditValue: '',
 
@@ -1725,6 +1855,21 @@
       olderYears: [],
       olderMonths: {},
       olderSessions: {},
+
+      // charts tab
+      chartsLocation: '',
+      chartsStats: null,
+      chartsStatsLoading: false,
+      muscleData: null,
+      muscleLoading: false,
+      muscleChartInstance: null,
+      muscleTimeFilter: 'all',
+      muscleExpanded: {},
+      muscleSelectedGroup: null,
+      e5rmExerciseId: '',
+      e5rmPoints: [],
+      e5rmLoading: false,
+      e5rmChartInstance: null,
       openHistoryMonths: {},
 
       // exercise picker
@@ -1765,6 +1910,11 @@
         }
         const now = new Date();
         this.newSession.datetime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden && this.timerOrigin) {
+            this.sessionTimer = Math.floor((Date.now() - this.timerOrigin) / 1000);
+          }
+        });
       },
 
       async login() {
@@ -1807,9 +1957,8 @@
 
       switchTab(tab) {
         this.activeTab = tab;
-        if (tab === 'exercises' && this.exercises.length === 0) {
-          this.loadExercises();
-        }
+        if (this.exercises.length === 0) this.loadExercises();
+        if (tab === 'charts') { this.loadChartStats(); this.loadMuscleChart(); }
       },
 
       async loadExercises() {
@@ -2046,6 +2195,297 @@
         }
       },
 
+      get chartLocations() {
+        const all = [
+          ...this.recentSessions,
+          ...Object.values(this.olderSessions).flat(),
+        ];
+        return [...new Set(all.map(s => s.location).filter(Boolean))].sort();
+      },
+
+      async loadChartStats() {
+        if (!this.user) return;
+        this.chartsStatsLoading = true;
+        this.chartsStats = null;
+        try {
+          // session count direct from PocketBase (avoids client-side duplication)
+          const sessFilterStr = `user="${this.user.id}" && completed = true` +
+            (this.chartsLocation ? ` && location = "${this.chartsLocation}"` : '');
+          const sr = await fetch(
+            `${API}/collections/sessions/records?filter=${encodeURIComponent(sessFilterStr)}&perPage=1&fields=id`,
+            { headers: this.authHeaders() }
+          );
+          const sd = await sr.json();
+          const sessionCount = sr.ok ? (sd.totalItems ?? 0) : 0;
+
+          // fetch all sets via relation filter, paginated
+          const locationClause = this.chartsLocation
+            ? ` && session_exercise.session.location = "${this.chartsLocation}"`
+            : '';
+          const baseFilter = `session_exercise.session.user = "${this.user.id}" && session_exercise.session.completed = true${locationClause}`;
+          const filter = encodeURIComponent(baseFilter);
+
+          let totalVolume = 0;
+          let totalReps = 0;
+          let page = 1;
+          const perPage = 500;
+
+          while (true) {
+            const r = await fetch(
+              `${API}/collections/sets/records?filter=${filter}&perPage=${perPage}&page=${page}&fields=reps,weight,set_type`,
+              { headers: this.authHeaders() }
+            );
+            const d = await r.json();
+            if (!r.ok) break;
+            for (const set of d.items) {
+              const reps = Number(set.reps) || 0;
+              const weight = Number(set.weight) || 0;
+              totalReps += reps;
+              if (set.set_type === 'Weighted') totalVolume += reps * weight;
+            }
+            if (d.items.length < perPage) break;
+            page++;
+          }
+
+          this.chartsStats = { volume: totalVolume, reps: totalReps, sessions: sessionCount };
+        } finally {
+          this.chartsStatsLoading = false;
+        }
+      },
+
+      formatNumber(n) {
+        return Math.round(n).toLocaleString();
+      },
+
+      formatVolume(n) {
+        if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+        return Math.round(n).toLocaleString();
+      },
+
+      get e5rmExerciseList() {
+        return [...this.exercises]
+          .filter(e => e.active_exercise !== false)
+          .sort((a, b) => a.name.localeCompare(b.name) || (a.variation || '').localeCompare(b.variation || ''));
+      },
+
+      calc5RM(reps, weight) {
+        // Epley: 1RM = weight * (1 + reps/30), then back-calculate 5RM
+        const oneRM = weight * (1 + reps / 30);
+        return Math.round((oneRM / (1 + 5 / 30)) * 10) / 10;
+      },
+
+      getMuscleTimeCutoff() {
+        const d = new Date();
+        if (this.muscleTimeFilter === '30d') d.setDate(d.getDate() - 30);
+        else if (this.muscleTimeFilter === '90d') d.setDate(d.getDate() - 90);
+        else if (this.muscleTimeFilter === '1y') d.setFullYear(d.getFullYear() - 1);
+        else return null;
+        const p = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} 00:00:00`;
+      },
+
+      async loadMuscleChart() {
+        if (!this.user) return;
+        this.muscleLoading = true;
+        this.muscleData = null;
+        this.muscleExpanded = {};
+        this.muscleSelectedGroup = null;
+        if (this.muscleChartInstance) { this.muscleChartInstance.destroy(); this.muscleChartInstance = null; }
+        try {
+          const locationClause = this.chartsLocation ? ` && session_exercise.session.location = "${this.chartsLocation}"` : '';
+          const cutoff = this.getMuscleTimeCutoff();
+          const dateClause = cutoff ? ` && session_exercise.session.date >= "${cutoff}"` : '';
+          const filter = encodeURIComponent(
+            `to_failure = true && session_exercise.session.user = "${this.user.id}" && session_exercise.session.completed = true${locationClause}${dateClause}`
+          );
+          const byGroup = {};
+          let page = 1;
+          while (true) {
+            const r = await fetch(
+              `${API}/collections/sets/records?filter=${filter}&expand=session_exercise.exercise&perPage=500&page=${page}`,
+              { headers: this.authHeaders() }
+            );
+            const d = await r.json();
+            if (!r.ok) break;
+            for (const set of d.items) {
+              const ex = set.expand?.session_exercise?.expand?.exercise;
+              const group = ex?.group || 'Other';
+              const muscle = ex?.muscle || 'Other';
+              if (!byGroup[group]) byGroup[group] = { count: 0, muscles: {} };
+              byGroup[group].count++;
+              byGroup[group].muscles[muscle] = (byGroup[group].muscles[muscle] || 0) + 1;
+            }
+            if (d.items.length < 500) break;
+            page++;
+          }
+          const total = Object.values(byGroup).reduce((a, b) => a + b.count, 0);
+          if (!total) { this.muscleData = []; return; }
+          const palette = ['#7b7bc4','#5b9bd5','#70c4a8','#e08c6a','#c47090','#a0c455','#d4b060','#888','#b07bc4','#60a8c4'];
+          const sorted = Object.entries(byGroup).sort((a, b) => b[1].count - a[1].count);
+          this.muscleData = sorted.map(([label, data], i) => ({
+            label,
+            count: data.count,
+            pct: Math.round(data.count / total * 100),
+            color: palette[i % palette.length],
+            muscles: Object.entries(data.muscles)
+              .sort((a, b) => b[1] - a[1])
+              .map(([ml, mc]) => ({ label: ml, count: mc })),
+          }));
+          this.$nextTick(() => this.renderMuscleChart());
+        } finally {
+          this.muscleLoading = false;
+        }
+      },
+
+      renderMuscleChart() {
+        const canvas = document.getElementById('muscleCanvas');
+        if (!canvas || !this.muscleData?.length) return;
+        if (this.muscleChartInstance) this.muscleChartInstance.destroy();
+        const muscleData = this.muscleData;
+        const pctLabelsPlugin = {
+          id: 'pctLabels',
+          afterDraw(chart) {
+            const { ctx } = chart;
+            const meta = chart.getDatasetMeta(0);
+            ctx.save();
+            meta.data.forEach((el, i) => {
+              const item = muscleData[i];
+              if (!item || item.pct < 7) return;
+              const mid = (el.startAngle + el.endAngle) / 2;
+              const r = (el.innerRadius + el.outerRadius) / 2;
+              ctx.fillStyle = '#fff';
+              ctx.font = 'bold 11px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(item.pct + '%', el.x + r * Math.cos(mid), el.y + r * Math.sin(mid));
+            });
+            ctx.restore();
+          },
+        };
+        this.muscleChartInstance = new Chart(canvas, {
+          type: 'doughnut',
+          plugins: [pctLabelsPlugin],
+          data: {
+            labels: muscleData.map(d => d.label),
+            datasets: [{
+              data: muscleData.map(d => d.count),
+              backgroundColor: muscleData.map(d => d.color),
+              borderWidth: 2,
+              borderColor: '#1a1a1a',
+              hoverOffset: 6,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            onClick: (evt, elements) => {
+              if (elements.length) {
+                const label = muscleData[elements[0].index].label;
+                this.muscleSelectedGroup = this.muscleSelectedGroup === label ? null : label;
+              }
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: ctx => ` ${ctx.label}: ${ctx.parsed} sets (${muscleData[ctx.dataIndex].pct}%)`,
+                },
+                backgroundColor: '#1a1a1a',
+                borderColor: '#2e2e2e',
+                borderWidth: 1,
+                titleColor: '#f0f0f0',
+                bodyColor: '#888',
+              },
+            },
+          },
+        });
+      },
+
+      async load5RM() {
+        if (!this.e5rmExerciseId) { this.e5rmPoints = []; return; }
+        this.e5rmLoading = true;
+        this.e5rmPoints = [];
+        if (this.e5rmChartInstance) { this.e5rmChartInstance.destroy(); this.e5rmChartInstance = null; }
+        try {
+          const locationClause = this.chartsLocation ? ` && session_exercise.session.location = "${this.chartsLocation}"` : '';
+          const filter = encodeURIComponent(
+            `session_exercise.exercise = "${this.e5rmExerciseId}" && top_set = true && to_failure = true && set_type = "Weighted" && session_exercise.session.user = "${this.user.id}" && session_exercise.session.completed = true${locationClause}`
+          );
+          const r = await fetch(
+            `${API}/collections/sets/records?filter=${filter}&expand=session_exercise.session&sort=session_exercise.session.date&perPage=500`,
+            { headers: this.authHeaders() }
+          );
+          const d = await r.json();
+          if (!r.ok) return;
+
+          // group by session date, keep max adjusted 5RM per session
+          const byDate = {};
+          for (const set of d.items) {
+            const date = set.expand?.session_exercise?.expand?.session?.date;
+            if (!date) continue;
+            const dateKey = date.slice(0, 10);
+            const adjusted = this.calc5RM(Number(set.reps) || 0, Number(set.weight) || 0);
+            if (!byDate[dateKey] || adjusted > byDate[dateKey]) byDate[dateKey] = adjusted;
+          }
+
+          this.e5rmPoints = Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0]));
+          if (this.e5rmPoints.length) this.$nextTick(() => this.render5RMChart());
+        } finally {
+          this.e5rmLoading = false;
+        }
+      },
+
+      render5RMChart() {
+        const canvas = document.getElementById('e5rmCanvas');
+        if (!canvas || !this.e5rmPoints.length) return;
+        if (this.e5rmChartInstance) { this.e5rmChartInstance.destroy(); }
+        const labels = this.e5rmPoints.map(([date]) => {
+          const d = new Date(date + 'T00:00:00Z');
+          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+        });
+        const values = this.e5rmPoints.map(([, v]) => v);
+        this.e5rmChartInstance = new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              data: values,
+              borderColor: '#7b7bc4',
+              backgroundColor: 'rgba(123,123,196,0.12)',
+              borderWidth: 2.5,
+              pointBackgroundColor: '#7b7bc4',
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              fill: true,
+              tension: 0.3,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: { label: ctx => ` ${ctx.parsed.y} lbs` },
+                backgroundColor: '#1a1a1a',
+                borderColor: '#2e2e2e',
+                borderWidth: 1,
+                titleColor: '#f0f0f0',
+                bodyColor: '#7b7bc4',
+              },
+            },
+            scales: {
+              x: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#2e2e2e' } },
+              y: {
+                ticks: { color: '#888', font: { size: 11 }, callback: v => v + ' lbs' },
+                grid: { color: '#2e2e2e' },
+              },
+            },
+          },
+        });
+      },
+
       toggleHistoryMonth(year, month) {
         const key = `${year}-${month}`;
         this.openHistoryMonths = { ...this.openHistoryMonths, [key]: !this.openHistoryMonths[key] };
@@ -2239,13 +2679,18 @@
       startTimer() {
         clearInterval(this.sessionTimerInterval);
         if (this.activeSession.session_length) {
-          this.sessionTimer = this.activeSession.session_length;
+          this.timerOrigin = Date.now() - this.activeSession.session_length * 1000;
         } else {
-          const start = new Date(this.activeSession.date.replace(' ', 'T') + 'Z');
-          const elapsed = Math.floor((Date.now() - start.getTime()) / 1000);
-          this.sessionTimer = isNaN(elapsed) ? 0 : Math.min(Math.max(0, elapsed), 7200);
+          let iso = this.activeSession.date.replace(' ', 'T');
+          if (!iso.endsWith('Z')) iso += 'Z';
+          const start = new Date(iso);
+          this.timerOrigin = isNaN(start.getTime()) ? Date.now() : start.getTime();
         }
-        this.sessionTimerInterval = setInterval(() => { this.sessionTimer++; }, 1000);
+        const tick = () => {
+          this.sessionTimer = Math.floor((Date.now() - this.timerOrigin) / 1000);
+        };
+        tick();
+        this.sessionTimerInterval = setInterval(tick, 1000);
       },
 
       stopTimer() {
@@ -2272,7 +2717,10 @@
         let secs = 0;
         if (parts.length === 3) secs = parts[0] * 3600 + parts[1] * 60 + parts[2];
         else if (parts.length === 2) secs = parts[0] * 60 + parts[1];
-        if (!isNaN(secs) && secs >= 0) this.sessionTimer = secs;
+        if (!isNaN(secs) && secs >= 0) {
+          this.timerOrigin = Date.now() - secs * 1000;
+          this.sessionTimer = secs;
+        }
         this.editingTimer = false;
       },
 
@@ -2413,13 +2861,22 @@
       async fetchLastSummary(se) {
         const exId = se.exercise || se.expand?.exercise?.id;
         if (!exId) return;
-        const filter = encodeURIComponent(`exercise="${exId}" && session != "${this.activeSession.id}"`);
+        const currentDate = this.activeSession.date;
+        const location = this.activeSession.location || '';
+        const filter = encodeURIComponent(
+          `exercise="${exId}" && session.user = "${this.user.id}" && session.location = "${location}" && session.date < "${currentDate}" && session.completed = true`
+        );
         const r = await fetch(
-          `${API}/collections/session_exercises/records?filter=${filter}&sort=-created&perPage=1`,
+          `${API}/collections/session_exercises/records?filter=${filter}&sort=-session.date&perPage=1`,
           { headers: this.authHeaders() }
         );
         const d = await r.json();
-        if (!r.ok || !d.items.length) { se._lastSummary = []; return; }
+        if (!r.ok || !d.items.length) {
+          this.activeSessionExercises = this.activeSessionExercises.map(e =>
+            e.id === se.id ? { ...e, _lastSummary: [] } : e
+          );
+          return;
+        }
         const lastSE = d.items[0];
         const r2 = await fetch(
           `${API}/collections/sets/records?filter=session_exercise="${lastSE.id}"&sort=set_number&perPage=50`,
