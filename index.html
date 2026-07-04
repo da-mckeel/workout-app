@@ -1103,6 +1103,10 @@
   <!-- ── Main App ── -->
   <div class="main-app" x-show="loggedIn" x-cloak>
 
+    <!-- Save error toast -->
+    <div class="error-msg" x-show="saveErrorMsg" x-text="saveErrorMsg"
+      style="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:400;width:calc(100% - 32px);max-width:448px;box-shadow:0 4px 16px rgba(0,0,0,0.5)"></div>
+
     <!-- Log home header (outside scroll area) -->
     <div class="log-home-header" x-show="!activeSession && activeTab === 'log'">
       <div style="display:flex;flex-direction:column;gap:10px;overflow:hidden">
@@ -1373,6 +1377,9 @@
       <div class="tab-pane" :class="{ active: activeTab === 'charts' }">
         <div class="page-header">
           <h2>Lifting Stats &amp; Progression</h2>
+          <button class="btn-icon" title="Sign out" @click="confirm('Sign out?') && logout()">
+            <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
         </div>
 
         <!-- Location slicer -->
@@ -1802,6 +1809,10 @@
 </div>
 
 <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
   const API = (typeof CONFIG !== 'undefined' ? CONFIG.API : 'http://localhost:8090/api');
 
   function app() {
@@ -1816,6 +1827,10 @@
 
       // navigation
       activeTab: 'log',
+
+      // transient save-failure banner
+      saveErrorMsg: '',
+      _saveErrTimeout: null,
 
       // log tab — new session form
       newSession: { datetime: '', location: '', title: '' },
@@ -1897,16 +1912,25 @@
       addExerciseLoading: false,
       addExerciseError: '',
 
-      init() {
+      async init() {
         const saved = localStorage.getItem('pb_token');
         const savedUser = localStorage.getItem('pb_user');
-        if (saved && savedUser) {
+        let savedUserObj = null;
+        try { savedUserObj = savedUser ? JSON.parse(savedUser) : null; } catch { /* corrupted storage */ }
+        if (saved && savedUserObj) {
           this.token = saved;
-          this.user = JSON.parse(savedUser);
+          this.user = savedUserObj;
           this.loggedIn = true;
-          this.loadHistory();
-          const activeId = localStorage.getItem('active_session_id');
-          if (activeId) this.resumeSessionById(activeId);
+          const stillValid = await this.refreshAuth();
+          if (stillValid) {
+            this.loadHistory();
+            const activeId = localStorage.getItem('active_session_id');
+            if (activeId) this.resumeSessionById(activeId);
+          }
+        } else if (saved || savedUser) {
+          // partial/corrupted auth state — clear it so login works cleanly
+          localStorage.removeItem('pb_token');
+          localStorage.removeItem('pb_user');
         }
         const now = new Date();
         this.newSession.datetime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -1940,6 +1964,9 @@
           localStorage.setItem('pb_user', JSON.stringify(this.user));
           this.loggedIn = true;
           this.loadHistory();
+          // resume any in-progress session (kept across token expiry / logout)
+          const activeId = localStorage.getItem('active_session_id');
+          if (activeId && !this.activeSession) this.resumeSessionById(activeId);
         } catch (e) {
           this.loginError = 'Network error. Check your connection.';
         } finally {
@@ -1948,11 +1975,64 @@
       },
 
       logout() {
+        // NOTE: active_session_id is intentionally kept so an in-progress
+        // session resumes after signing back in.
+        this.stopTimer();
         this.loggedIn = false;
         this.token = null;
         this.user = null;
+        this.activeSession = null;
+        this.activeSessionExercises = [];
+        this.sessionTimer = 0;
+        this.timerOrigin = 0;
         localStorage.removeItem('pb_token');
         localStorage.removeItem('pb_user');
+      },
+
+      handleAuthExpired() {
+        if (!this.loggedIn) return;
+        this.logout();
+        this.loginError = 'Your session expired. Please sign in again.';
+      },
+
+      // wrapper for authenticated calls: kicks back to login on 401 instead
+      // of leaving the app in a dead state
+      async api(url, opts = {}) {
+        if (!opts.headers) opts.headers = this.authHeaders();
+        const res = await fetch(url, opts);
+        if (res.status === 401) this.handleAuthExpired();
+        return res;
+      },
+
+      // validate/renew the stored token on launch; returns false only when
+      // the server explicitly rejects it (network errors keep the session)
+      async refreshAuth() {
+        try {
+          const res = await fetch(`${API}/collections/users/auth-refresh`, {
+            method: 'POST',
+            headers: this.authHeaders(),
+          });
+          if (res.status === 401 || res.status === 403) {
+            this.handleAuthExpired();
+            return false;
+          }
+          if (res.ok) {
+            const data = await res.json();
+            this.token = data.token;
+            this.user = data.record;
+            localStorage.setItem('pb_token', this.token);
+            localStorage.setItem('pb_user', JSON.stringify(this.user));
+          }
+          return true;
+        } catch {
+          return true; // offline — keep cached auth and let the user work
+        }
+      },
+
+      notifySaveError(msg) {
+        this.saveErrorMsg = msg || 'Save failed — check your connection.';
+        clearTimeout(this._saveErrTimeout);
+        this._saveErrTimeout = setTimeout(() => { this.saveErrorMsg = ''; }, 5000);
       },
 
       switchTab(tab) {
@@ -1965,7 +2045,7 @@
         this.exercisesLoading = true;
         this.exercisesError = '';
         try {
-          const res = await fetch(
+          const res = await this.api(
             `${API}/collections/exercises/records?perPage=500&sort=group,name&filter=active_exercise=true`,
             { headers: this.authHeaders() }
           );
@@ -2053,7 +2133,7 @@
         this.editExerciseLoading = true;
         try {
           const { id, name, variation, group, muscle, notes } = this.editExerciseForm;
-          const res = await fetch(`${API}/collections/exercises/records/${id}`, {
+          const res = await this.api(`${API}/collections/exercises/records/${id}`, {
             method: 'PATCH',
             headers: this.authHeaders(),
             body: JSON.stringify({ name, variation, group, muscle, notes }),
@@ -2080,7 +2160,7 @@
         this.editExerciseLoading = true;
         this.editExerciseError = '';
         try {
-          const res = await fetch(`${API}/collections/exercises/records/${this.selectedExercise.id}`, {
+          const res = await this.api(`${API}/collections/exercises/records/${this.selectedExercise.id}`, {
             method: 'PATCH',
             headers: this.authHeaders(),
             body: JSON.stringify({ active_exercise: false }),
@@ -2124,7 +2204,7 @@
         }
         this.addExerciseLoading = true;
         try {
-          const res = await fetch(`${API}/collections/exercises/records`, {
+          const res = await this.api(`${API}/collections/exercises/records`, {
             method: 'POST',
             headers: this.authHeaders(),
             body: JSON.stringify({ ...this.newExercise, active_exercise: true }),
@@ -2148,7 +2228,7 @@
       async loadHistory() {
         this.historyLoading = true;
         try {
-          const res = await fetch(
+          const res = await this.api(
             `${API}/collections/sessions/records?perPage=200&sort=-date&filter=user="${this.user.id}"`,
             { headers: this.authHeaders() }
           );
@@ -2158,7 +2238,7 @@
           // fetch exercise counts for each session
           const sessions = await Promise.all(data.items.map(async s => {
             try {
-              const r = await fetch(
+              const r = await this.api(
                 `${API}/collections/session_exercises/records?perPage=1&filter=session="${s.id}"`,
                 { headers: this.authHeaders() }
               );
@@ -2174,6 +2254,7 @@
           this.recentSessions = sessions.filter(s => new Date(s.date) >= cutoff);
 
           const older = sessions.filter(s => new Date(s.date) < cutoff);
+          this.olderSessions = {}; // rebuild from scratch — appending would duplicate on reload
           const byYear = {};
           for (const s of older) {
             const d = new Date(s.date);
@@ -2211,7 +2292,7 @@
           // session count direct from PocketBase (avoids client-side duplication)
           const sessFilterStr = `user="${this.user.id}" && completed = true` +
             (this.chartsLocation ? ` && location = "${this.chartsLocation}"` : '');
-          const sr = await fetch(
+          const sr = await this.api(
             `${API}/collections/sessions/records?filter=${encodeURIComponent(sessFilterStr)}&perPage=1&fields=id`,
             { headers: this.authHeaders() }
           );
@@ -2231,7 +2312,7 @@
           const perPage = 500;
 
           while (true) {
-            const r = await fetch(
+            const r = await this.api(
               `${API}/collections/sets/records?filter=${filter}&perPage=${perPage}&page=${page}&fields=reps,weight,set_type`,
               { headers: this.authHeaders() }
             );
@@ -2301,7 +2382,7 @@
           const byGroup = {};
           let page = 1;
           while (true) {
-            const r = await fetch(
+            const r = await this.api(
               `${API}/collections/sets/records?filter=${filter}&expand=session_exercise.exercise&perPage=500&page=${page}`,
               { headers: this.authHeaders() }
             );
@@ -2412,7 +2493,7 @@
           const filter = encodeURIComponent(
             `session_exercise.exercise = "${this.e5rmExerciseId}" && top_set = true && to_failure = true && set_type = "Weighted" && session_exercise.session.user = "${this.user.id}" && session_exercise.session.completed = true${locationClause}`
           );
-          const r = await fetch(
+          const r = await this.api(
             `${API}/collections/sets/records?filter=${filter}&expand=session_exercise.session&sort=session_exercise.session.date&perPage=500`,
             { headers: this.authHeaders() }
           );
@@ -2501,7 +2582,7 @@
         if (noLocation) { this.startSessionError = 'Please select a location.'; return; }
         this.sessionStarting = true;
         try {
-          const res = await fetch(`${API}/collections/sessions/records`, {
+          const res = await this.api(`${API}/collections/sessions/records`, {
             method: 'POST',
             headers: this.authHeaders(),
             body: JSON.stringify({
@@ -2513,12 +2594,17 @@
             }),
           });
           const data = await res.json();
-          if (!res.ok) return;
+          if (!res.ok) {
+            this.startSessionError = data?.message || 'Could not start session. Check your connection.';
+            return;
+          }
           localStorage.setItem('active_session_id', data.id);
           this.activeSession = data;
           this.activeSessionExercises = [];
           this.loadHistory();
           this.startTimer();
+        } catch {
+          this.startSessionError = 'Network error. Check your connection.';
         } finally {
           this.sessionStarting = false;
         }
@@ -2526,14 +2612,17 @@
 
       async resumeSessionById(id) {
         try {
-          const res = await fetch(`${API}/collections/sessions/records/${id}`, { headers: this.authHeaders() });
-          if (!res.ok) { localStorage.removeItem('active_session_id'); return; }
+          const res = await this.api(`${API}/collections/sessions/records/${id}`, { headers: this.authHeaders() });
+          // only forget the session if it truly no longer exists — a 401
+          // (expired token) or other failure must not destroy the pointer
+          if (res.status === 404) { localStorage.removeItem('active_session_id'); return; }
+          if (!res.ok) return;
           const session = await res.json();
           if (session.completed) { localStorage.removeItem('active_session_id'); return; }
           this.activeSession = session;
           await this.loadSessionExercises();
           this.startTimer();
-        } catch { localStorage.removeItem('active_session_id'); }
+        } catch { /* network error — keep the pointer for the next launch */ }
       },
 
       async resumeSession(session) {
@@ -2551,7 +2640,7 @@
         this.viewSession = session;
         this.viewSessionExercises = [];
         this.viewSessionLoading = true;
-        const res = await fetch(
+        const res = await this.api(
           `${API}/collections/session_exercises/records?filter=session="${session.id}"&sort=order&expand=exercise&perPage=50`,
           { headers: this.authHeaders() }
         );
@@ -2559,7 +2648,7 @@
         if (res.ok) {
           const seList = data.items;
           await Promise.all(seList.map(async se => {
-            const r = await fetch(
+            const r = await this.api(
               `${API}/collections/sets/records?filter=session_exercise="${se.id}"&sort=set_number&perPage=50`,
               { headers: this.authHeaders() }
             );
@@ -2604,17 +2693,21 @@
           const dateUTC = `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:00`;
 
           // create new session
-          const sRes = await fetch(`${API}/collections/sessions/records`, {
+          const sRes = await this.api(`${API}/collections/sessions/records`, {
             method: 'POST',
             headers: this.authHeaders(),
             body: JSON.stringify({ user: this.user.id, date: dateUTC, location: source.location, title: source.title, completed: false }),
           });
           const newSession = await sRes.json();
+          if (!sRes.ok) {
+            this.notifySaveError('Could not copy session — check your connection.');
+            return;
+          }
 
           // copy each exercise + its sets sequentially to preserve order
           const newSEs = [];
           for (const se of sourceSEs) {
-            const seRes = await fetch(`${API}/collections/session_exercises/records`, {
+            const seRes = await this.api(`${API}/collections/session_exercises/records`, {
               method: 'POST',
               headers: this.authHeaders(),
               body: JSON.stringify({ session: newSession.id, exercise: se.exercise, order: se.order }),
@@ -2625,7 +2718,7 @@
             newSE._collapsed = false;
             newSE._lastSummary = [];
             for (const set of se.sets) {
-              const setRes = await fetch(`${API}/collections/sets/records`, {
+              const setRes = await this.api(`${API}/collections/sets/records`, {
                 method: 'POST',
                 headers: this.authHeaders(),
                 body: JSON.stringify({ session_exercise: newSE.id, set_number: set.set_number, set_type: set.set_type, weight: set.weight, reps: set.reps, duration: set.duration, top_set: set.top_set, to_failure: set.to_failure }),
@@ -2645,13 +2738,15 @@
           this.loadHistory();
           newSEs.forEach(se => this.fetchLastSummary(se));
           this.startTimer();
+        } catch {
+          this.notifySaveError('Copy failed partway — check your connection.');
         } finally {
           this.copying = false;
         }
       },
 
       async loadSessionExercises() {
-        const res = await fetch(
+        const res = await this.api(
           `${API}/collections/session_exercises/records?filter=session="${this.activeSession.id}"&sort=order&expand=exercise&perPage=50`,
           { headers: this.authHeaders() }
         );
@@ -2661,7 +2756,7 @@
 
         // load sets for each session_exercise
         await Promise.all(seList.map(async se => {
-          const r = await fetch(
+          const r = await this.api(
             `${API}/collections/sets/records?filter=session_exercise="${se.id}"&sort=set_number&perPage=50`,
             { headers: this.authHeaders() }
           );
@@ -2748,7 +2843,7 @@
           const p = n => String(n).padStart(2, '0');
           const d = new Date(this.editSessionForm.datetime);
           const dateUTC = `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:00`;
-          const res = await fetch(`${API}/collections/sessions/records/${this.activeSession.id}`, {
+          const res = await this.api(`${API}/collections/sessions/records/${this.activeSession.id}`, {
             method: 'PATCH',
             headers: this.authHeaders(),
             body: JSON.stringify({ title: this.editSessionForm.title, location: this.editSessionForm.location, date: dateUTC }),
@@ -2763,13 +2858,24 @@
       },
 
       async finishSession() {
+        const length = this.sessionTimer;
+        try {
+          const res = await this.api(`${API}/collections/sessions/records/${this.activeSession.id}`, {
+            method: 'PATCH',
+            headers: this.authHeaders(),
+            body: JSON.stringify({ completed: true, session_length: length }),
+          });
+          if (!res.ok) {
+            // keep the session active — clearing state here would lose it
+            this.notifySaveError('Could not finish session — check your connection and try again.');
+            return;
+          }
+        } catch {
+          this.notifySaveError('Could not finish session — check your connection and try again.');
+          return;
+        }
         this.stopTimer();
-        await fetch(`${API}/collections/sessions/records/${this.activeSession.id}`, {
-          method: 'PATCH',
-          headers: this.authHeaders(),
-          body: JSON.stringify({ completed: true, session_length: this.sessionTimer }),
-        });
-        const finished = { ...this.activeSession, completed: true, session_length: this.sessionTimer };
+        const finished = { ...this.activeSession, completed: true, session_length: length };
         localStorage.removeItem('active_session_id');
         this.activeSession = null;
         this.activeSessionExercises = [];
@@ -2806,7 +2912,7 @@
       async pickExercise(exercise) {
         this.showExercisePicker = false;
         const order = this.activeSessionExercises.length + 1;
-        const res = await fetch(`${API}/collections/session_exercises/records`, {
+        const res = await this.api(`${API}/collections/session_exercises/records`, {
           method: 'POST',
           headers: this.authHeaders(),
           body: JSON.stringify({ session: this.activeSession.id, exercise: exercise.id, order }),
@@ -2825,9 +2931,9 @@
         if (!confirm('Remove this exercise from the session?')) return;
         // delete all sets first, then the session_exercise
         await Promise.all((se.sets || []).filter(s => s.id).map(s =>
-          fetch(`${API}/collections/sets/records/${s.id}`, { method: 'DELETE', headers: this.authHeaders() })
+          this.api(`${API}/collections/sets/records/${s.id}`, { method: 'DELETE', headers: this.authHeaders() })
         ));
-        await fetch(`${API}/collections/session_exercises/records/${se.id}`, {
+        await this.api(`${API}/collections/session_exercises/records/${se.id}`, {
           method: 'DELETE', headers: this.authHeaders(),
         });
         this.activeSessionExercises = this.activeSessionExercises.filter(e => e.id !== se.id);
@@ -2850,7 +2956,7 @@
         }
         this.activeSessionExercises = newArr;
         await Promise.all(newArr.map((se, i) =>
-          fetch(`${API}/collections/session_exercises/records/${se.id}`, {
+          this.api(`${API}/collections/session_exercises/records/${se.id}`, {
             method: 'PATCH',
             headers: this.authHeaders(),
             body: JSON.stringify({ order: i + 1 }),
@@ -2866,7 +2972,7 @@
         const filter = encodeURIComponent(
           `exercise="${exId}" && session.user = "${this.user.id}" && session.location = "${location}" && session.date < "${currentDate}" && session.completed = true`
         );
-        const r = await fetch(
+        const r = await this.api(
           `${API}/collections/session_exercises/records?filter=${filter}&sort=-session.date&perPage=1`,
           { headers: this.authHeaders() }
         );
@@ -2878,7 +2984,7 @@
           return;
         }
         const lastSE = d.items[0];
-        const r2 = await fetch(
+        const r2 = await this.api(
           `${API}/collections/sets/records?filter=session_exercise="${lastSE.id}"&sort=set_number&perPage=50`,
           { headers: this.authHeaders() }
         );
@@ -2916,7 +3022,14 @@
         se.sets.push(this.blankSet(se, se.sets.length + 1));
       },
 
-      async saveSet(se, set, idx) {
+      saveSet(se, set, idx) {
+        // serialize saves per set: a second change while the initial POST is
+        // in flight must wait for the id, or it would create a duplicate row
+        set._saveChain = (set._saveChain || Promise.resolve()).then(() => this.doSaveSet(se, set, idx));
+        return set._saveChain;
+      },
+
+      async doSaveSet(se, set, idx) {
         const payload = {
           session_exercise: se.id,
           set_number: idx + 1,
@@ -2927,16 +3040,22 @@
           top_set: !!set.top_set,
           to_failure: !!set.to_failure,
         };
-        if (set.id) {
-          await fetch(`${API}/collections/sets/records/${set.id}`, {
-            method: 'PATCH', headers: this.authHeaders(), body: JSON.stringify(payload),
-          });
-        } else {
-          const res = await fetch(`${API}/collections/sets/records`, {
-            method: 'POST', headers: this.authHeaders(), body: JSON.stringify(payload),
-          });
-          const data = await res.json();
-          if (res.ok) set.id = data.id;
+        try {
+          if (set.id) {
+            const res = await this.api(`${API}/collections/sets/records/${set.id}`, {
+              method: 'PATCH', headers: this.authHeaders(), body: JSON.stringify(payload),
+            });
+            if (!res.ok) this.notifySaveError('Set not saved — check your connection.');
+          } else {
+            const res = await this.api(`${API}/collections/sets/records`, {
+              method: 'POST', headers: this.authHeaders(), body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (res.ok) set.id = data.id;
+            else this.notifySaveError('Set not saved — check your connection.');
+          }
+        } catch {
+          this.notifySaveError('Set not saved — check your connection.');
         }
       },
 
@@ -2968,7 +3087,7 @@
 
       async removeSet(se, set, idx) {
         if (set.id) {
-          await fetch(`${API}/collections/sets/records/${set.id}`, {
+          await this.api(`${API}/collections/sets/records/${set.id}`, {
             method: 'DELETE', headers: this.authHeaders(),
           });
         }

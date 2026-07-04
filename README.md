@@ -46,6 +46,7 @@ Copy these files to your PocketBase `pb_public` folder:
 
 ```
 index.html
+sw.js
 manifest.json
 config.js
 icon-192.png
